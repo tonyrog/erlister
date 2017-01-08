@@ -1,0 +1,6 @@
+{application, erlister,
+ [{description, "State machine specification language"},
+  {vsn, "1.0"},
+  {env, []},
+  {applications,[kernel,stdlib]}
+  ]}.
