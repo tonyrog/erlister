@@ -1,4 +1,4 @@
 #erlister
 
-State machine language heavliy inspired by ALISTER.
+State machine language heavily inspired by ALISTER.
 
