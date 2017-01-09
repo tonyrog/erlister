@@ -9,7 +9,6 @@
 
 -compile(export_all).
 
-
 start([File]) ->
     case file:read_file(File) of
 	{ok,Bin} ->
@@ -59,16 +58,21 @@ lint([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     %% remove clocks?
     Sym2 = export_submachines(MACHINES0,Sym1),
     {MACHINES1,Es4} = lint_submachine_list(MACHINES0,[],Sym2,Es3),
-    {{machine,Ln,ID,IN1,DEF1,OUT1,CLOCK1,MACHINES1},Es4};
+
+    {IN2,Es5} = lint_in(IN1,[],Sym2,Es4),
+    {DEF2,Es6} = lint_def(DEF1,[],Sym2,Es5),
+    {CLOCK2,Es7} = lint_clock(CLOCK1,[],Sym2,Es6),
+    %% Fixme: remove global in variables?
+    {OUT2,Es8} = lint_out(OUT1,[],Sym2,true,Es7),
+    {{machine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,MACHINES1},Es8};
 lint([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
     Sym = maps:new(),
     {STATES1,Sym1,Es1} = lint_states(States,[],Sym,[]),
     {IN1,DEF1,OUT1,CLOCK1,Sym2,Es2} = lint_misc_0(Misc,[],[],[],[],Sym1,Es1),
-
     {IN2,Es3} = lint_in(IN1,[],Sym2,Es2),
     {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es3),
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
-    {OUT2,Es6} = lint_out(OUT1,[],Sym2,Es5),
+    {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
     {TRANS1,Es7} = lint_trans(Trans,[],Sym2,Es6),
     {{machine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,STATES1,TRANS1},Es7}.
 
@@ -116,7 +120,7 @@ lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
     {IN2,Es1} = lint_in(IN1,[],Sym1,Es),
     {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es1),
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
-    {OUT2,Es4} = lint_out(OUT1,[],Sym1,Es3),
+    {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
     M = {submachine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,STATE,TRANS1},
     lint_submachine_list(Ms,[M|Acc],Sym,Es5);
@@ -264,10 +268,10 @@ lint_clock([Clock={_ID,_Ln,{_Name,{_L,_H,_S},_D}}|Xs],Acc,Sym,Es) ->
 lint_clock([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
-lint_out([{ID,Ln,Sat}|Xs],Acc,Sym,Es) ->
-    {Sat1,Es1} = lint_osat(Sat,Sym,Es),
-    lint_out(Xs,[{ID,Ln,Sat1}|Acc],Sym,Es1);
-lint_out([],Acc,_Sym,Es) ->
+lint_out([{ID,Ln,Sat}|Xs],Acc,Sym,Sub,Es) ->
+    {Sat1,Es1} = lint_osat(Sat,Sym,Sub,Es),
+    lint_out(Xs,[{ID,Ln,Sat1}|Acc],Sym,Sub,Es1);
+lint_out([],Acc,_Sym,_Sub,Es) ->
     {Acc,Es}.
 
 
@@ -284,14 +288,19 @@ lint_dsat(Form,Sym,Es0) ->
 	     end,Es0).
 
 %% Lint  output SAT formual
-%% allowed variables are IN,DEF and STATE
+%% For submachines out variables are
+%%   local IN, local DEF, local STATE
+%% For machine variables are
+%%   global IN, global DEF, STATE and submachine OUT, submachine STATE
 %%
-lint_osat(Form,Sym,Es0) ->
+lint_osat(Form,Sym,_Sub,Es0) ->
     lint_sat(Form,
 	     fun(I={identifier,_Ln,_ID},Es) ->
+		     %% global IN, DEF or STATE
 		     lint_in_def_state_variable(I,Sym,Es);
 		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
-		     lint_in_def_state_variable(I,Sym,Es);
+		     %% sibling STATE,OUT
+		     lint_out_or_state_variable(I,Sym,Es);
 		({timeout,_Ln,{identifier,Ln,ID}},Es) ->
 		     lint_timeout_(ID,Ln,Sym,Es)
 	     end, Es0).

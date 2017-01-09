@@ -33,7 +33,6 @@ Terminals
         flonum hexnum octnum binnum decnum
 	.
 
-%% Right 100 '='.
 Left 200  '->'.
 Left 300  '<->'.
 Left 400  '||'.
@@ -74,7 +73,6 @@ submachine_def ->
 	trans_def :
 	{submachine,line('$1'),'$2','$4','$5','$6'}.
 
-misc_defs -> '$empty' : [].
 misc_defs -> misc_def : '$1'.
 misc_defs -> misc_defs misc_def : '$1'++'$2'.
 
@@ -128,14 +126,15 @@ trans_list_item -> identifier ':' trans_def_list ';' : {'$1','$3'}.
 trans_def_list -> trans_def_item  : ['$1'].
 trans_def_list -> trans_def_list ',' trans_def_item  : '$1'++['$3'].
 
+trans_def_item -> identifier sat_formula :
+		      {'$1','$2',{start,[]}}.
 trans_def_item -> identifier sat_formula start_timer_list :
 		      {'$1','$2',{start,'$3'}}.
 
-start_timer -> 'start' '(' identifier ')' : '$3'.
-
-start_timer_list -> '$empty' : [].
 start_timer_list -> start_timer    : ['$1'].
 start_timer_list -> start_timer_list start_timer : '$1'++['$2'].
+
+start_timer -> 'start' '(' identifier ')' : '$3'.
 
 identifier_list -> identifier : ['$1'].
 identifier_list -> identifier_list ',' identifier : '$1'++['$3'].

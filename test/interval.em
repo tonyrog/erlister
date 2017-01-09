@@ -14,27 +14,27 @@ submachine springback;
 
 in button = button;
 
-out value = ON;
+out value = on;
 
-states OFF, ON;
+states off, on;
 
 trans
 
-OFF: ON  button;
-ON:  OFF button;
+off: on  button;
+on:  off button;
 
 submachine alternate;
 
 in enable = springback.value;
 
-out value = HIGH;
+out value = high;
 
-clocks Th = high_time [0-5.0, 0.2] 2,
-       Tl = low_time  [0-5.0, 0.2] 2;
+clocks Th = high_time [0-5, 0.2] 2,
+       Tl = low_time  [0-5, 0.2] 2;
 
-states LOW, HIGH;
+states low, high;
 
 trans
 
-LOW:  HIGH enable && timeout(Th) start(Tl);
-HIGH: LOW  enable && timeout(Tl) start(Th);
+low:  high enable && timeout(Th) start(Tl);
+high: low  enable && timeout(Tl) start(Th);
