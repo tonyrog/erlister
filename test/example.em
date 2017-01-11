@@ -21,4 +21,4 @@ state1: state2 y1;
 state2: state1 !y1 && !x3,
 	state3 x3 start(T);
 
-state3: state1 !x3 && timeout(T);
+state3: state1 !x2 && timeout(T);
