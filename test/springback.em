@@ -5,11 +5,11 @@ machine springback;
 
 in button;
 
-out value = ON;
+out value = on;
 
-states OFF, ON;
+states off, on;
 
 trans
 
-OFF: ON  button;
-ON:  OFF button;
+off: on  button;
+on:  off button;

@@ -1,8 +1,8 @@
 //
-//  EXEMPLE atomic macine
+// exemple atomic macine
 //
 
-machine EXAMPLE;
+machine example;
 
 in x1, x2, x3;
 

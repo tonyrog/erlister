@@ -9,6 +9,8 @@
 
 -compile(export_all).
 
+-include("../include/erlister.hrl").
+
 start([File]) ->
     case file:read_file(File) of
 	{ok,Bin} ->
@@ -26,6 +28,8 @@ start([File]) ->
 			    case lint(Machine) of
 				{Machine1,[]} ->
 				    io:format("machine' ~p\n", [Machine1]),
+				    io:format("erl_code=\n~s\n", 
+					      [erlister_erl_code:code(Machine1)]),
 				    halt(0);
 				{Machine1,ERR} ->
 				    lists:foreach(
@@ -64,7 +68,8 @@ lint([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     {CLOCK2,Es7} = lint_clock(CLOCK1,[],Sym2,Es6),
     %% Fixme: remove global in variables?
     {OUT2,Es8} = lint_out(OUT1,[],Sym2,true,Es7),
-    {{machine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,MACHINES1},Es8};
+    {#machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+	      submachines=SUBMACHINES,machines=MACHINES1},Es8};
 lint([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
     Sym = maps:new(),
     {STATES1,Sym1,Es1} = lint_states(States,[],Sym,[]),
@@ -74,7 +79,8 @@ lint([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
     {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
     {TRANS1,Es7} = lint_trans(Trans,[],Sym2,Es6),
-    {{machine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,STATES1,TRANS1},Es7}.
+    {#machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+	      states=STATES1,trans=TRANS1},Es7}.
 
 %% First scan of submachines, check unique submachine name,
 %% check uniqueness for in,def,out,state.
@@ -122,11 +128,11 @@ lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
     {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
-    M = {submachine,Ln,ID,IN2,DEF2,OUT2,CLOCK2,STATE,TRANS1},
+    M = #machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+		 states=STATE,trans=TRANS1},
     lint_submachine_list(Ms,[M|Acc],Sym,Es5);
 lint_submachine_list([],Acc,_Sym,Es) ->
     {Acc,Es}.
-
 
 lint_submachines([{identifier,Ln,ID}|Xs],SUBMACHINES,Es) ->
     case lists:member(ID, SUBMACHINES) of
@@ -435,8 +441,8 @@ lint_sat(I={field,_Ln,_OBJ,_ID},Lookup,Es) ->
     Lookup(I,Es);
 lint_sat(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,Es) ->
     Lookup(I,Es);
-lint_sat(F={'0',_Ln},_Lookup,Es) -> {F,Es};
-lint_sat(F={'1',_Ln},_Lookup,Es) -> {F,Es};
+lint_sat({'0',_Ln},_Lookup,Es) -> {0,Es};
+lint_sat({'1',_Ln},_Lookup,Es) -> {1,Es};
 lint_sat({Op,_Ln,R,L},Lookup,Es) when 
       Op =:= '&&'; Op =:= '||'; Op =:= '->'; Op =:= '<->' ->
     {L1,Es1} = lint_sat(L,Lookup,Es),
@@ -454,8 +460,8 @@ lint_pred(I={field,_Ln,_OBJ,_ID},Lookup,Es) ->
     Lookup(I,Es);
 lint_pred(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,Es) ->
     Lookup(I,Es);
-lint_pred(F={'0',_Ln},_Lookup,Es) -> {F,Es};
-lint_pred(F={'1',_Ln},_Lookup,Es) -> {F,Es};
+lint_pred({'0',_Ln},_Lookup,Es) -> {0,Es};
+lint_pred({'1',_Ln},_Lookup,Es) -> {1,Es};
 lint_pred({'ALL',_Ln,{identifier,_,X},F},Lookup,Es) ->
     {F,Es1} = lint_pred(F,Lookup,Es),
     {{'ALL',{var,X},F},Es1};
