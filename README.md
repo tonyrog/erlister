@@ -2,15 +2,14 @@
 
 State machine language heavily inspired by ALISTER.
 
-
 ## The language
 
 Erlister is a language to define state machines and
-its behaviour. The langauge defines a number of sections
+its behaviour. The language defines a number of sections
 and defines two types of machines namely: atomic machines and
 composed machines. The common sections are
 
-- in paramater section
+- in parameter section
 - def variable section
 - out variable section
 - clock section
@@ -44,7 +43,7 @@ The name of the timer declare the range the timer have, from configuration
 data, it's minimal step value and the default.
 
 The out section is a list of output assignments from the state machine. Each
-output is given by a boolan formula that may also contain timeout expressions
+output is given by a Boolean formula that may also contain timeout expressions
 and state names. When a state name is used in a formula the meaning is
 that the machine is that state.
 
@@ -68,23 +67,29 @@ State transitions are given with the trans directive
 
     on_precharge: on_wait timeout(on_timer) && onoff_releases;
 
+The trans directive should be read something like: to change
+state to the state on the left hand side of the colon, the machine
+must be in the state given on the right hand side and the formula
+must true. When the transition is done optional timers listed are
+started.
+
 # Composed machines
 
-When multiple states are needed the submachines is a handy way
+When multiple states are needed the sub machines is a handy way
 to introduce that. A composed machine do not have a transition
 table it self but each submachine may have one.
 
-Submachines are introduced with the declaration 
+Sub machines are introduced with the declaration 
 
     submachines alternate, springback;
 
 The machines are evaluated in this order (may change.)
 
-Each submachine is like an atomic machine.
+Each sub machine is like an atomic machine.
 The input section uses global input parameters and 
 def variables from the machine declaration.
 The input formulas may also use output values and states from 
-sibling submachines.
+sibling sub machines.
 
     machine interval;
 
@@ -110,3 +115,36 @@ sibling submachines.
       trans
         low:  high enable && timeout(Th) start(Tl);
         high: low  enable && timeout(Tl) start(Th);
+
+# General syntax of the formula
+
+The following BNF gives the syntax for a general formula,
+note that not all parts are valid in all sections.
+    <digit> := "0".."9"
+    <letter> := "a".."z"|"A".."Z"|"_"
+    <identifer> := <letter>(<letter>|<digit>)*
+    <constant> := "0" | "1"
+    <arg> := <number> | <identifer>
+
+    <formula> ::= <constant>
+              | <identifier>
+              | <identifier> "(" [ <arg> ( "," <arg> ) ] ")"
+	      | <identifier> "." <identifier>
+              | "!" <formula>
+              | <formula> "&&" <formula>
+              | <formula> "||" <formula>
+              | <formula> "->" <formula>
+              | <formula> "<->" <formula>
+              | "ALL" <identifer> <formula>
+              | "SOME" <identifer> <formula>
+
+# Roadmap
+
+- Add canopen types, boolean, unsigned8, unsigned16, unsigned32, integer8,
+  integer16,integer32 as types to 'in','def' and 'out' declarations.
+- Add comparison operations "<","<=",">",">=","==" and "!=" to formulas
+- Add arithmetic and bit operators in formulas.
+- Add "running(T)" for timer to check if timer is running, then 
+  def never_started = !running(T) && !timeout(T)
+- Add ramp object R for generating output ramps over time, ramp object may
+ be started "start(R)" and stopped "stop(R)" and also check for "running(R)".

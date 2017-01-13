@@ -18,6 +18,32 @@
 code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
 	      submachines=undefined,
 	      states=STATES,trans=TRANS}) ->
+    [
+     code_init(ID,ID,IN,OUT,STATES),
+     code_update(ID, "main", IN, DEF, OUT, CLOCKS, TRANS)
+    ];
+code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
+	      submachines=SUBMACHINES,
+	      machines=MACHINES,
+	      states=undefined,trans=undefined}) ->
+    [
+     code_init(ID,ID,IN,OUT,[]),
+     code_update(ID,hd(SUBMACHINES),IN,DEF,OUT,CLOCKS,[]),
+     code_machines(SUBMACHINES, MACHINES)
+    ].
+
+code_machines([M1,M2|Ms], MACHINES) ->
+    M = lists:keyfind(M1,#machine.name, MACHINES),
+    [ code_update(M1, M2, M#machine.name, M#machine.def, M#machine.out,
+		  M#machine.clocks, M#machine.trans) |
+      code_machines([M2|Ms], MACHINES)];
+code_machines([M1], MACHINES) ->
+    M = lists:keyfind(M1,#machine.name, MACHINES),
+    [ code_update(M1, "main", M#machine.in, M#machine.def, M#machine.out,
+		  M#machine.clocks, M#machine.trans)].
+    
+    
+code_init(ID,FIRST,IN,OUT,STATES) ->
     IList = [Name || {Name,_Ln,_Pred} <- IN],
     OList = [Name || {Name,_Ln,_Sat} <- OUT],
     S0 = case STATES of
@@ -36,10 +62,15 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      "main(S0,I0,O0) ->",?N,
      ?T,"receive",?N,
      ?T,?T, "{timeout,_Ref,_Name} -> update(S0,I0,O0);",?N,
-     ?T,?T, "I -> update(S0,maps:merge(I0,I),O0)",?N,
+     ?T,?T, "I -> update_",FIRST,"(S0,maps:merge(I0,I),O0)",?N,
      ?T,"end",?E,
-     ?N,
-     "update(S0,I1 = #{ ", alist("i_",":=","I_",IList), "},","O0) -> ",?N,
+     ?N].
+
+code_update(ID, NEXT, IN, DEF, OUT, CLOCKS, TRANS) ->
+    IList = [Name || {Name,_Ln,_Pred} <- IN],
+    OList = [Name || {Name,_Ln,_Sat} <- OUT],
+    [
+     "update_",ID,"(S0,I1 = #{ ",alist("i_",":=","I_",IList), "},","O0) -> ",?N,
      [ [?T,"D_"++D," = ", formula(Sat), ",",?N] ||
 	 {D,_,Sat} <- DEF],
      [ [?T,"T_"++T," = ", "read_timer('",T,"')",",",?N] ||
@@ -50,10 +81,9 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
        || {From,Cond,To,Start} <- expand_trans(TRANS) ],
      [?T,?T, "_ -> S0",?N],
      [?T,"end,",?N],
-     [ [?T,"O_"++O," = ", formula(OSat), ",",?N] ||
-	 {O,_,OSat} <- OUT],
-     ?T,"main(S1, I1, O0#{ ", alist("o_","=>","O_",OList), "})",?E,
-     ?N
+     [ [?T,"O_"++O," = ", formula(OSat), ",",?N] || {O,_,OSat} <- OUT],
+     [?T,"O1 = O0#{ ", alist("o_","=>","O_",OList), "},",?N ],
+     ?T,"update_",NEXT,"(S1, I1, O1)",?E
     ].
 
 expand_trans([{To,_Ln0,FromList} | TRs]) ->
@@ -90,15 +120,3 @@ formula({'||',L,R}) -> ["(",formula(L),") orelse (",formula(R),")"];
 formula({'->',L,R}) -> ["not (",formula(L),") orelse (",formula(R),")"];
 formula({'<->',L,R}) -> ["(",formula(L),") =:= (",formula(R),")"];
 formula({'!',F}) -> ["not (",formula(F),")"].
-
-
-
-    
-    
-
-
-    
-
-
-
-
