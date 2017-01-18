@@ -120,16 +120,18 @@ sibling sub machines.
 
 The following BNF gives the syntax for a general formula,
 note that not all parts are valid in all sections.
+
     <digit> := "0".."9"
     <letter> := "a".."z"|"A".."Z"|"_"
     <identifer> := <letter>(<letter>|<digit>)*
     <constant> := "0" | "1"
+    <number> := <digit>+
     <arg> := <number> | <identifer>
 
     <formula> ::= <constant>
               | <identifier>
               | <identifier> "(" [ <arg> ( "," <arg> ) ] ")"
-	      | <identifier> "." <identifier>
+              | <identifier> "." <identifier>
               | "!" <formula>
               | <formula> "&&" <formula>
               | <formula> "||" <formula>

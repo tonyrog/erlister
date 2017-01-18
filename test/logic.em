@@ -1,8 +1,8 @@
 
 machine LOGIC;
 
-in x1 = a && b || c,
-   x2 = SOME x have_x_resource(x) || d;
+in x1, x2,
+   x3 = SOME x have_x_resource(x) && (x1 || x2);
 
 out 
     y1 = x1,

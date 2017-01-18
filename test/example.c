@@ -5,10 +5,10 @@ typedef unsigned short analog_t;
 typedef unsigned long  timer_t;
 typedef unsigned char  state_t;
 
-#define x1 0
-#define x2 1
-#define x3 2
-#define T  0
+#define EXAMPLE_x1 0
+#define EXAMPLE_x2 1
+#define EXAMPLE_x3 2
+#define EXAMPLE_T  0
 
 digital_t input[3];
 digital_t output[1];
@@ -27,15 +27,15 @@ int timeout(int i)
     return 0;
 }
 
-void machine_global()
+void machine()
 {
-    digital y1 = input[x1] && input[x2];
+    digital y1 = input[EXAMPLE_x1] && input[EXAMPLE_x2];
 
     switch(state) {
     case state1:
-	if (!y1 && !input[x3])
+	if (!y1 && !input[EXAMPLE_x3])
 	    state = state2;
-	else if (!input[x2] && timeout(T))
+	else if (!input[EXAMPLE_x2] && timeout(EXAMPLE_T))
 	    state = state3;
 	break;
     case state2:
@@ -43,8 +43,8 @@ void machine_global()
 	    state = state1;
 	break;
     case state3:
-	if (input[x3]) {
-	    start(T);
+	if (input[EXAMPLE_x3]) {
+	    start(EXAMPLE_T);
 	    state = state2;
 	}
 	break;
