@@ -1,0 +1,16 @@
+#!/usr/bin/env escript
+%% -*- erlang -*-
+%%% @author Tony Rogvall <tony@rogvall.se>
+%%% @copyright (C) 2017, Tony Rogvall
+%%% @doc
+%%%    Start erlister translator
+%%% @end
+
+main(Args) ->
+    erlister:start(Args).
+
+
+
+
+
+
