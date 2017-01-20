@@ -12,51 +12,92 @@
 -include("../include/erlister.hrl").
 
 machine(M = #machine { in=IN }) ->
-    IN1 = [{I,Ln,pred(Pred)} || {I,Ln,Pred} <- IN],
+    IN1 = [{I,Ln,formula(Pred)} || {I,Ln,Pred} <- IN],
     M#machine { in = IN1 }.
 
-pred(undefined) -> undefined;
-pred(F) -> pred(F,[]).
+formula(undefined) -> undefined;
+formula(F) -> formula(F,[]).
 
-pred(0,_Vs) -> 0;
-pred(1,_Vs) -> 1;
-pred(I={in,_ID},_Vs) -> I;
-pred(V={var,_X},_Vs) -> V;
-pred({pred,_P,_As},_Vs) -> 0;  %% FIXME
-pred({'ALL',{var,X},F},Vs) ->
-    pred(F, [{all,X}|Vs]);
-pred({'SOME',{var,X},F},Vs) ->
-    pred(F, [{some,X}|Vs]);
-pred({'&&',L,R},Vs) ->
-    case pred(L,Vs) of
+formula(0,_Vs) -> 0;
+formula(1,_Vs) -> 1;
+formula(I={in,_ID},_Vs) -> I;
+formula(V={var,_X},_Vs) -> V;
+formula({pred,P,As},Vs) -> 
+    pred(list_to_atom(P),As,Vs);
+formula({'ALL',{var,X},F},Vs) ->
+    formula(F, [{all,X}|Vs]);
+formula({'SOME',{var,X},F},Vs) ->
+    formula(F, [{some,X}|Vs]);
+formula({'&&',L,R},Vs) ->
+    case formula(L,Vs) of
 	0 -> 0;
-	1 -> pred(R,Vs);
+	1 -> formula(R,Vs);
 	L1 ->
-	    case pred(R,Vs) of
+	    case formula(R,Vs) of
 		0 -> 0;
 		1 -> L1;
 		R1 -> {'&&',L1,R1}
 	    end
     end;
-pred({'||',L,R},Vs) ->
-    case pred(L,Vs) of
+formula({'||',L,R},Vs) ->
+    case formula(L,Vs) of
 	1 -> 1;
-	0 -> pred(R,Vs);
+	0 -> formula(R,Vs);
 	L1 ->
-	    case pred(R,Vs) of
+	    case formula(R,Vs) of
 		1 -> 1;
 		0 -> L1;
 		R1 -> {'||',L1,R1}
 	    end
     end;
-pred({'->',L,R},Vs) ->
-    pred({'||',{'!',L},R}, Vs);
-pred({'<->',L,R},Vs) ->
-    Li = pred(L,Vs),
-    Ri = pred(R,Vs),
+formula({'->',L,R},Vs) ->
+    formula({'||',{'!',L},R}, Vs);
+formula({'<->',L,R},Vs) ->
+    Li = formula(L,Vs),
+    Ri = formula(R,Vs),
     case {Li,Ri} of
 	{X,X} -> 1;
 	{0,1} -> 0;
 	{1,0} -> 0;
 	_ -> {'<->',Li,Ri}
     end.
+%%
+%% data looks like: {foo,1,2}, {foo,1,3}, {foo,1,1}, {foo,2,2}
+%% predicates may look like:
+%%  {foo,1,2}
+%%  {foo,{all,"x"},{all,"x"}}
+%%  {foo,1,{some,"Y"}}
+%% 
+pred(P,As,Vs) ->
+    As1 = eval_args(As, Vs),
+    {ok,Ts} = application:get_env(erlister, true),
+    {ok,Fs} = application:get_env(erlister, false),
+    Tab = ets:new(match_tab, []),
+    _ = [ ets:insert(Tab, {Ti,true}) || Ti <- Ts],
+    _ = [ ets:insert(Tab, {Fi,false}) || Fi <- Fs],
+    pred_match_(Tab, list_to_atom(P), As1).
+
+pred_match_(_T, _P, _As) ->
+    %% FIXME
+    0.
+
+eval_args([{var,X}|As], Vs) ->
+    case lists:keyfind(X, 2, Vs) of
+	false ->
+	    [{var,X}|eval_args(As,Vs)];
+	{all,X} ->
+	    [{all,X}|eval_args(As,Vs)];
+	{some,X} ->
+	    [{some,X}|eval_args(As,Vs)]
+    end;
+eval_args([{const,V}|As], Vs) ->
+    [V|eval_args(As,Vs)];
+eval_args([], _Vs) ->
+    [].
+
+
+
+	
+	    
+    
+    

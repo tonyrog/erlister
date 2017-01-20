@@ -22,6 +22,8 @@ Nonterminals
         pred_formula
         sat_formula
         identifier_list
+        argument_list
+        argument
         number
 	.
 
@@ -138,6 +140,12 @@ start_timer -> 'start' '(' identifier ')' : '$3'.
 
 identifier_list -> identifier : ['$1'].
 identifier_list -> identifier_list ',' identifier : '$1'++['$3'].
+
+argument_list -> argument : ['$1'].
+argument_list -> argument_list ',' argument : '$1'++['$3'].
+
+argument -> number : '$1'.
+argument -> identifier : '$1'.
      
 number -> flonum : '$1'.
 number -> hexnum : '$1'.
@@ -162,7 +170,7 @@ sat_formula -> sat_formula '<->' sat_formula : {'<->',line('$2'),'$1','$3'}.
 pred_formula -> '0' : '$1'.
 pred_formula -> '1' : '$1'.
 pred_formula -> identifier : '$1'.
-pred_formula -> identifier '(' identifier_list ')' :{pred,line('$1'),'$1','$3'}.
+pred_formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
 pred_formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
 pred_formula -> '!' pred_formula : {'!',line('$1'),'$2'}.
 pred_formula -> '(' pred_formula ')' : '$2'.

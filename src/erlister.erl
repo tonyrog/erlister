@@ -12,52 +12,33 @@
 -include("../include/erlister.hrl").
 
 options() ->
-    [ # { long=>"lang",
-	  short=>"l",
-	  key=>lang,
-	  spec=>[{"erlang",erlang},
-		 {"c",c},
-		 {"seazone",seazone}],
-	  default=>c,
-	  description=>"output language"
-	},
-      # { long => "output-file",
-	  short => "o",
-	  key => output,
-	  spec => string,
-	  description => "output file name"
-	  },
-      # { long => "version",
-	  short => "v", 
-	  key => version,
-	  spec => string,
-	  default => undefined,
-	  description => "application version."
-	},
-      # { long => "help",
-	  short => "h", 
-	  key => help,
-	  spec => void,
-	  default => undefined,
-	  description => "this help"
-	}
+    [ {lang,$l,"lang", {atom,c}, "output language" },
+      {output,$o,"output-file", string, "output file name"},
+      {version,$v,"version", undefined, "application version"},
+      {help,$h,"help", undefined, "this help"}
     ].
     
 start() ->
     start([]).
 
-start(Opts) ->
-    %% io:format("Opts = ~p\n", [Opts]),
+start(Args) ->
     application:load(erlister),
-    case getopt:args(?MODULE, Opts, options()) of
-	{ok,{_Props,[]}} ->
-	    io:format("missing input file\n", []),
-	    halt(1);
+    case getopt:parse(options(), Args) of
+	{ok,{Props,[]}} ->
+	    case lists:member(help,Props) of
+		true ->
+		    getopt:usage(options(), "erlister"),
+		    halt(0);
+		false ->
+		    io:format("~s: missing input file\n", ["erlister"]),
+		    halt(1)
+	    end;
 	{ok,{Props,[File]}} ->
 	    do_input(Props, File);
-	{error,{Mod,Message}} ->
+	{error,Error} ->
 	    io:format("~s\n", 
-		      [apply(Mod,format_error,[Message,options()])]),
+		      [getopt:format_error(options(),Error)]),
+	    getopt:usage(options(), "erlister"),
 	    halt(1)
     end.
 
