@@ -11,7 +11,57 @@
 
 -include("../include/erlister.hrl").
 
-start([File]) ->
+options() ->
+    [ # { long=>"lang",
+	  short=>"l",
+	  key=>lang,
+	  spec=>[{"erlang",erlang},
+		 {"c",c},
+		 {"seazone",seazone}],
+	  default=>c,
+	  description=>"output language"
+	},
+      # { long => "output-file",
+	  short => "o",
+	  key => output,
+	  spec => string,
+	  description => "output file name"
+	  },
+      # { long => "version",
+	  short => "v", 
+	  key => version,
+	  spec => string,
+	  default => undefined,
+	  description => "application version."
+	},
+      # { long => "help",
+	  short => "h", 
+	  key => help,
+	  spec => void,
+	  default => undefined,
+	  description => "this help"
+	}
+    ].
+    
+start() ->
+    start([]).
+
+start(Opts) ->
+    %% io:format("Opts = ~p\n", [Opts]),
+    application:load(erlister),
+    case getopt:args(?MODULE, Opts, options()) of
+	{ok,{_Props,[]}} ->
+	    io:format("missing input file\n", []),
+	    halt(1);
+	{ok,{Props,[File]}} ->
+	    do_input(Props, File);
+	{error,{Mod,Message}} ->
+	    io:format("~s\n", 
+		      [apply(Mod,format_error,[Message,options()])]),
+	    halt(1)
+    end.
+
+do_input(Props, File) ->
     case file:read_file(File) of
 	{ok,Bin} ->
 	    case erlister_scan:string(binary_to_list(Bin)) of
@@ -27,11 +77,7 @@ start([File]) ->
 			    io:format("machine ~p\n", [Machine]),
 			    case erlister_lint:machine(Machine) of
 				{Machine1,[]} ->
-				    Machine2 = erlister_eval:machine(Machine1),
-				    io:format("machine' ~p\n", [Machine2]),
-				    io:format("erl_code=\n~s\n", 
-					      [erlister_c_code:code(Machine2)]),
-				    halt(0);
+				    do_emit(Props, Machine1);
 				{Machine1,ERR} ->
 				    lists:foreach(
 				      fun({Ln,Mod,Message}) ->
@@ -52,4 +98,22 @@ start([File]) ->
 	Error ->
 	    io:format("error: ~p\n", [Error]),
 	    halt(1)
+    end.
+
+do_emit(Props, Machine) ->
+    Machine1 = erlister_eval:machine(Machine),
+    io:format("machine' ~p\n", [Machine1]),
+    Code =
+	case proplists:get_value(lang,Props,c) of
+	    c -> erlister_c_code:code(Machine1);
+	    erlang -> erlister_erl_code:code(Machine1);
+	    seazone -> erlister_sz_code:code(Machine1)
+	end,
+    case proplists:get_value(output, Props) of
+	undefined ->
+	    io:put_chars([Code]),
+	    halt(0);
+	File ->
+	    file:write_file(File, Code),
+	    halt(0)
     end.
