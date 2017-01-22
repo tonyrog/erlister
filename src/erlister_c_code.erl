@@ -52,7 +52,7 @@ declare(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
        [ ?T, "digital_t output[",ID,"_","NUM_OUTPUT]",?E],
        [ [[?T,"timer_t   ", "clk_",M#machine.name,"_",T,?E] ||
 	     {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
-       [[?T,"timer_t   clk_",ID,"_",T,?E] || {T,_,_} <- CLOCKS],
+       [ [?T,"timer_t  clk_",ID,"_",T,?E] || {T,_,_} <- CLOCKS],
        [ [?T,"state_t  st_", M#machine.name,?E] || M <- MACHINES ],
        if STATES =:= [] ->
 	       [];
@@ -242,6 +242,7 @@ formula(SELF,trans,{in,ID})  -> fid(SELF,ID);
 formula(SELF,out,{in,ID})    -> fid(SELF,ID);
 formula(SELF,def,{in,ID})    -> fid(SELF,ID);
 formula(SELF,_Type,{in,ID})  -> ["ctx->input[IN_",fid(SELF,ID),"]"];
+formula(SELF,_Type,{out1,ID}) -> ["ctx->output[OUT_",fid(SELF,ID),"]"];
 formula(SELF,_Type,{out,ID}) -> ["ctx->output[OUT_",fid(SELF,ID),"]"];
 formula(SELF,_Type,{def,ID}) -> fid(SELF,ID);
 formula(SELF,_Type,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];

@@ -37,7 +37,8 @@ wait(STATE,IN,OUT) ->
 loop(
     STATE = #{
                 'GREEN_state' := ST_GREEN,
-                'RED_state' := ST_RED    },
+                'RED_state' := ST_RED
+    },
     IN = #{
         'SIGNAL_goahead' := I_SIGNAL_goahead,
         'SIGNAL_lg' := I_SIGNAL_lg,
@@ -78,8 +79,8 @@ loop(
     OUT1_GREEN_error = ?BOOL((not (IN_GREEN_error_in)) andalso (((CLK_GREEN_T1 =:= timeout)) andalso ((not (IN_GREEN_light_control)) andalso (IN_GREEN_request_on)))),
     IN_RED_request_on = not (I_SIGNAL_goahead),
     IN_RED_light_control = I_SIGNAL_lr,
-    IN_RED_error_in = OUT_GREEN_error,
-    IN_RED_gok = OUT_GREEN_ok,
+    IN_RED_error_in = OUT1_GREEN_error,
+    IN_RED_gok = OUT1_GREEN_ok,
     CLK_RED_T2 = erlister_rt:read_timer(clk_SIGNAL_T2),
     ST1_RED = 
         case (ST_RED) of
@@ -103,7 +104,8 @@ loop(
     OUT1_SIGNAL_r = ?BOOL((ST1_RED =:= 'on')),
     wait(STATE#{
                 'GREEN_state' => ST1_GREEN,
-                'RED_state' => ST1_RED    },
+                'RED_state' => ST1_RED
+    },
     IN,
     OUT#{
         'SIGNAL_g' => OUT1_SIGNAL_g,

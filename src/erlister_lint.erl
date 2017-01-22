@@ -22,9 +22,9 @@ machine([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     {MACHINES0,Es3} = lint_submachine_list_0(Machines,[],SUBMACHINES,Es2),
     %% remove clocks?
     Sym2 = export_submachines(MACHINES0,Sym1),
-    {MACHINES1,Es4} = lint_submachine_list(MACHINES0,[],Sym2,Es3),
+    {MACHINES1,Es4} = lint_submachine_list(MACHINES0,[],Sym2,SUBMACHINES,Es3),
 
-    {IN2,Es5} = lint_in(IN1,[],Sym2,Es4),
+    {IN2,Es5} = lint_in(IN1,[],Sym2,ID,[],Es4),
     {DEF2,Es6} = lint_def(DEF1,[],Sym2,Es5),
     {CLOCK2,Es7} = lint_clock(CLOCK1,[],Sym2,Es6),
     %% Fixme: remove global in variables?
@@ -35,7 +35,7 @@ machine([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) 
     Sym = maps:new(),
     {STATES1,Sym1,Es1} = lint_states(States,[],Sym,[]),
     {IN1,DEF1,OUT1,CLOCK1,Sym2,Es2} = lint_misc_0(Misc,[],[],[],[],Sym1,Es1),
-    {IN2,Es3} = lint_in(IN1,[],Sym2,Es2),
+    {IN2,Es3} = lint_in(IN1,[],Sym2,ID,[],Es2),
     {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es3),
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
     {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
@@ -82,10 +82,10 @@ export_submachines([],Sym) ->
     Sym.
 
 lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
-		       STATE,Trans,Sym0}|Ms],Acc,Sym,Es) ->
+		       STATE,Trans,Sym0}|Ms],Acc,Sym,SUBMACHINES,Es) ->
     %% merge "global" symbols with locals, should remove self! maybe ok?
     Sym1 = maps:merge(Sym0,Sym),
-    {IN2,Es1} = lint_in(IN1,[],Sym1,Es),
+    {IN2,Es1} = lint_in(IN1,[],Sym1,ID,SUBMACHINES,Es),
     {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es1),
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
     {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
@@ -93,8 +93,8 @@ lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
     M = #machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
 		 states=STATE,trans=TRANS1},
-    lint_submachine_list(Ms,[M|Acc],Sym,Es5);
-lint_submachine_list([],Acc,_Sym,Es) ->
+    lint_submachine_list(Ms,[M|Acc],Sym,SUBMACHINES,Es5);
+lint_submachine_list([],Acc,_Sym,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 lint_submachines([{identifier,Ln,ID}|Xs],SUBMACHINES,Es) ->
@@ -205,9 +205,9 @@ lint_out_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
 %% Check input
-lint_in([{ID,Ln,undefined}|Xs],Acc,Sym,Es0) ->
-    lint_in(Xs,[{ID,Ln,undefined}|Acc],Sym,Es0);
-lint_in([{ID,Ln,Pred}|Xs],Acc,Sym,Es0) ->
+lint_in([{ID,Ln,undefined}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
+    lint_in(Xs,[{ID,Ln,undefined}|Acc],Sym,Mid,SUBMACHINES,Es0);
+lint_in([{ID,Ln,Pred}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
     {Pred1,Es1} = 
 	lint_pred(Pred,
 		  fun(I={identifier,_Ln,_ID},Es) ->
@@ -215,14 +215,14 @@ lint_in([{ID,Ln,Pred}|Xs],Acc,Sym,Es0) ->
 			  lint_in_variable(I,Sym,Es);
 		     (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es)->
 			  %% submachine out or state
-			  lint_out_or_state_variable(I,Sym,Es);
+			  lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
 		     ({timeout,Ln1,{identifier,_Ln,TID}},Es) ->
 			  E = {Ln1,?MODULE,["timeout(",TID,")"
 					    " can not be used in this section"]},
 			  {{timeout,ID},[E|Es]}
 		  end,Es0),
-    lint_in(Xs,[{ID,Ln,Pred1}|Acc],Sym,Es1);
-lint_in([],Acc,_Sym,Es) ->
+    lint_in(Xs,[{ID,Ln,Pred1}|Acc],Sym,Mid,SUBMACHINES,Es1);
+lint_in([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 %% Check def
@@ -268,8 +268,8 @@ lint_osat(Form,Sym,_Sub,Es0) ->
 		     %% global IN, DEF or STATE
 		     lint_in_def_state_variable(I,Sym,Es);
 		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
-		     %% sibling STATE,OUT
-		     lint_out_or_state_variable(I,Sym,Es);
+		     %% sibling STATE,OUT?
+		     lint_out_or_state_variable(I,Sym,"",[],Es);
 		({timeout,_Ln,{identifier,Ln,ID}},Es) ->
 		     lint_timeout_(ID,Ln,Sym,Es)
 	     end, Es0).
@@ -344,16 +344,27 @@ lint_in_variable_(ID,Ln,Sym,Es) ->
     end.
 
 
-lint_out_or_state_variable({identifier,Ln,ID},Sym,Es) ->
-    lint_out_or_state_variable_(ID,Ln,Sym,Es);
+lint_out_or_state_variable({identifier,Ln,ID},Sym,Mid,SUBMACHINES,Es) ->
+    lint_out_or_state_variable_(ID,Ln,Sym,Mid,SUBMACHINES,Es);
 lint_out_or_state_variable({field,Ln,{identifier,_,OBJ},{identifier,_,ID}},
-			   Sym,Es) ->
-    lint_out_or_state_variable_([OBJ,".",ID],Ln,Sym,Es).
+			   Sym,Mid,SUBMACHINES,Es) ->
+    lint_out_or_state_variable_([OBJ,".",ID],Ln,Sym,Mid,SUBMACHINES,Es).
 
-lint_out_or_state_variable_(ID,Ln,Sym,Es) ->
+lint_out_or_state_variable_(ID,Ln,Sym,Mid,SUBMACHINES,Es) ->
     case maps:find(ID,Sym) of
 	{ok,{out,_}} ->
-	    {{out,ID},Es};
+	    case ID of
+		[M,".",_FLD] ->
+		    case index(M, SUBMACHINES) < index(Mid,SUBMACHINES) of
+			true ->
+			    %% out1 refere to the current instance of the output
+			    {{out1,ID},Es};
+			false ->
+			    {{out,ID},Es}
+		    end;
+		_ ->
+		    {{out,ID},Es}
+	    end;
 	{ok,{state,_}} ->
 	    {{state,ID},Es};
 	_ ->
@@ -475,6 +486,12 @@ get_number({binnum,_Ln,[$0,$b|Ds]}) -> list_to_integer(Ds,2);
 get_number({flonum,_Ln,Ds}) -> list_to_float(Ds);
 get_number({'1',_Ln}) -> 1;
 get_number({'0',_Ln}) -> 0.
+
+index(Key,Keys) ->
+    index_(Key,Keys,1).
+
+index_(Key,[Key|_],I) -> I;
+index_(Key,[_|Keys],I) -> index_(Key,Keys,I+1).
 
 format_error(Message) ->
     case io_lib:deep_char_list(Message) of

@@ -43,7 +43,8 @@ declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
     [
      "-module('",ID,"').",?N,
      "-export([main/0,wait/3,loop/3,final/0]).",?N,
-     "-define(BOOL(X), if (X) -> 1; true -> 0 end).",?N,
+     "-define(BOOL2INT(X), if (X) -> 1; true -> 0 end).",?N,
+     "-define(INT2BOOL(X), ((X) =/= 0)).", ?N
      ?N
     ].
 
@@ -64,7 +65,7 @@ wait(_ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
      "wait(STATE,IN,OUT) ->",?N,
      ?T,"receive",?N,
      ?T,?T,"{timeout,_Ref,_} -> loop(STATE,IN,OUT)",?E,
-     ?T,?T,"INPUT -> loop(STATE,maps:merge(INPUT,IN),OUT)",?N,
+     ?T,?T,"INPUT -> loop(STATE,maps:merge(IN,INPUT),OUT)",?N,
      ?T,"end.",?N
      ?N
     ].
@@ -122,7 +123,7 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 		 M <- MACHINES],
 	     [?T,?T],",",?N),
      if STATES =:= [] ->
-	     [];
+	     [?N];
 	true ->
 	     [?T,?T,?Q,ID,"_state'"," := ",
 	      ["ST_",ID],?N]
@@ -143,8 +144,7 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 	     [?T,?T],",",?N),?N,
      ?T,"}) ->", ?N,
      %% load input from formula
-     [ [?T,["IN_",ID,"_",Name]," = ",formula(ID,in,Name,Pred),",",?N] ||
-	 {Name,_,Pred} <- IN],
+     [ [?T,["IN_",ID,"_",Name]," = ",formula(ID,in,Name,Pred),",",?N] || {Name,_,Pred} <- IN],
 
      [ [?T,["DEF_",ID,"_",Name]," = ",formula(ID,def,Sat),",",?N] ||
 	 {Name,_,Sat} <- DEF, Sat =/= undefined ],
@@ -163,14 +163,14 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 	       "erlister_rt:read_timer(", "clk_",ID,"_",T,"),",?N] ||
 		 {T,_,_} <- M#machine.clocks],
 	     code_trans(Mid, M#machine.trans),
-	     [ [?T,"OUT1_",[Mid,"_",Name]," = ?BOOL(",
+	     [ [?T,"OUT1_",[Mid,"_",Name]," = ?BOOL2INT(",
 		formula(Mid,out,Sat),")",",",?N] || 
 		 {Name,_,Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      
      code_trans(ID, TRANS),
-     [ [?T,"OUT1_",[ID,"_",Name]," = ?BOOL(",
+     [ [?T,"OUT1_",[ID,"_",Name]," = ?BOOL2INT(",
 	formula(ID,out,Sat),")",",",?N] || 
 	 {Name,_,Sat} <- OUT,Sat =/= undefined],
 
@@ -180,7 +180,7 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 		 M <- MACHINES],
 	     [?T,?T],",",?N),
      if STATES =:= [] ->
-	     [];
+	     [?N];
 	true ->
 	     [?T,?T,?Q,ID,"_state",?Q," => ",
 	      ["ST1_",ID],?N]
@@ -260,16 +260,15 @@ arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];
 arglist([A|As],Pre,Sep,Del) -> [Pre,A,Sep,Del | arglist(As,Pre,Sep,Del)].
 
-formula(SELF,in,Name,undefined) -> ["I_",fid(SELF,Name)];
+formula(SELF,in,Name,undefined) -> ["?INT2BOOL(","I_",fid(SELF,Name),")"];
 formula(SELF,Type,_Name,F) -> formula(SELF,Type,F).
 
 formula(_SELF,_Type,0)    -> "true";
 formula(_SELF,_Type,1)    -> "false";
-formula(SELF,in,{in,ID})    ->  ["I_",fid(SELF,ID)];
+formula(SELF,in,{in,ID})    ->  ["?INT2BOOL(","I_",fid(SELF,ID),")"];
 formula(SELF,_Type,{in,ID})  -> ["IN_",fid(SELF,ID)];
-formula(SELF,_Type,{out,ID}) ->
-    %% FIXME OUT1 must be used if SELF.ID is redefined
-    ["OUT_",fid(SELF,ID)];
+formula(SELF,_Type,{out1,ID}) -> ["OUT1_",fid(SELF,ID)];
+formula(SELF,_Type,{out,ID}) -> ["OUT_",fid(SELF,ID)];
 formula(SELF,_Type,{def,ID}) -> ["DEF_",fid(SELF,ID)];
 formula(SELF,out,{state,ID}) ->  ["(ST1_",mid(SELF,ID)," =:= ",
 				  ?Q,fld(ID),?Q,")"];
