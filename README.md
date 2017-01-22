@@ -68,8 +68,8 @@ State transitions are given with the trans directive
     on_precharge: on_wait timeout(on_timer) && onoff_releases;
 
 The trans directive should be read something like: to change
-state to the state on the left hand side of the colon, the machine
-must be in the state given on the right hand side and the formula
+state to the state on the right hand side of the colon, the machine
+must be in the state given on the left hand side and the formula
 must true. When the transition is done optional timers listed are
 started.
 
@@ -113,8 +113,8 @@ sibling sub machines.
              Tl = low_time  [0-5, 0.2] 2;
       states low, high;
       trans
-        low:  high enable && timeout(Th) start(Tl);
-        high: low  enable && timeout(Tl) start(Th);
+        high: low enable && timeout(Th) start(Tl);
+        low: high enable && timeout(Tl) start(Th);
 
 # General syntax of the formula
 

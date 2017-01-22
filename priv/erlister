@@ -8,9 +8,3 @@
 
 main(Args) ->
     erlister:start(Args).
-
-
-
-
-
-

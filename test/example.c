@@ -1,52 +1,89 @@
-// C code generated from example.em
-
 typedef unsigned char  digital_t;
 typedef unsigned short analog_t;
 typedef unsigned long  timer_t;
 typedef unsigned char  state_t;
 
-#define EXAMPLE_x1 0
-#define EXAMPLE_x2 1
-#define EXAMPLE_x3 2
-#define EXAMPLE_T  0
+enum {
+    IN_example_x1,
+    IN_example_x2,
+    IN_example_x3,
+    example_NUM_INPUT
+};
 
-digital_t input[3];
-digital_t output[1];
-timer_t   clocks[1];
-state_t   state;
+enum {
+    OUT_example_z1,
+    example_NUM_OUTPUT
+};
 
-void start(int i)
+enum {
+    example_state1,
+    example_state2,
+    example_state3
+};
+
+typedef struct {
+    digital_t input[example_NUM_INPUT];
+    digital_t output[example_NUM_OUTPUT];
+    timer_t   clk_example_T;
+    state_t   example_state;
+} example_ctx_t;
+
+extern int timer_init(timer_t* tp);
+extern int timer_start(timer_t* tp);
+extern int timer_stop(timer_t* tp);
+extern int timer_timeout(timer_t* tp);
+
+void init(example_ctx_t* ctx)
 {
-    clocks[i] = tick();
+    ctx->input[IN_example_x1] = 0;
+    ctx->input[IN_example_x2] = 0;
+    ctx->input[IN_example_x3] = 0;
+    ctx->output[OUT_example_z1] = 0;
+    timer_init(&ctx->clk_example_T);
+    ctx->example_state = example_state1;
 }
 
-int timeout(int i)
+void final(example_ctx_t* ctx)
 {
-    if (clock[i]+2000 >= tick())
-	return 1;
-    return 0;
+    timer_stop(&ctx->clk_example_T);
 }
 
-void machine()
+void machine(example_ctx_t* ctx)
 {
-    digital y1 = input[EXAMPLE_x1] && input[EXAMPLE_x2];
+    digital_t example_x1;
+    digital_t example_x2;
+    digital_t example_x3;
+    digital_t example_y1;
 
-    switch(state) {
-    case state1:
-	if (!y1 && !input[EXAMPLE_x3])
-	    state = state2;
-	else if (!input[EXAMPLE_x2] && timeout(EXAMPLE_T))
-	    state = state3;
-	break;
-    case state2:
-	if (y1)
-	    state = state1;
-	break;
-    case state3:
-	if (input[EXAMPLE_x3]) {
-	    start(EXAMPLE_T);
-	    state = state2;
-	}
-	break;
+    example_x1 = ctx->input[IN_example_x1];
+    example_x2 = ctx->input[IN_example_x2];
+    example_x3 = ctx->input[IN_example_x3];
+    example_y1 = (example_x2) && (example_x1);
+    switch(ctx->example_state) {
+    case example_state1:
+        if ((timer_timeout(&ctx->clk_example_T)) && (!(example_x2))) {
+            ctx->example_state = example_state3;
+            break;
+        }
+        if ((!(example_x3)) && (!(example_y1))) {
+            ctx->example_state = example_state2;
+            break;
+        }
+        break;
+    case example_state2:
+        if (example_y1) {
+            ctx->example_state = example_state1;
+            break;
+        }
+        break;
+    case example_state3:
+        if (example_x3) {
+            ctx->example_state = example_state2;
+            timer_start(&ctx->clk_example_T);
+            break;
+        }
+        break;
+    default: break;
     }
+    ctx->output[OUT_example_z1] = (!((ctx->example_state == example_state1))) && (example_y1);
 }

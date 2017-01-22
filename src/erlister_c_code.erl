@@ -21,6 +21,7 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
     [
      declare(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      init(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
+     final(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      main(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[])
     ];
 code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
@@ -31,6 +32,7 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
     [
      declare(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      init(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
+     final(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      main(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
@@ -45,37 +47,61 @@ declare(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
      enum_out(ID, OUT, [{M#machine.name,M#machine.out}||M<-MACHINES]),?N,
      enum_state(ID, STATES),?N,
      [ [enum_state(M#machine.name, M#machine.states),?N] || M <- MACHINES ],
-     enum_states(ID,[M#machine.name||M<-MACHINES]),?N,
-     enum_clocks(ID,CLOCKS,MACHINES),?N,
-
-     [ "digital_t input[",ID,"_","NUM_INPUT]",?E],
-     [ "digital_t output[",ID,"_","NUM_OUTPUT]",?E],
-     [ "state_t   state[",ID,"_","NUM_MACHINES]",?E],
-     [ "timer_t   clock[",ID,"_","NUM_CLOCKS]",?E],
+     [ "typedef struct {", ?N,
+       [ ?T, "digital_t input[",ID,"_","NUM_INPUT]",?E],
+       [ ?T, "digital_t output[",ID,"_","NUM_OUTPUT]",?E],
+       [ [[?T,"timer_t   ", "clk_",M#machine.name,"_",T,?E] ||
+	     {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
+       [[?T,"timer_t   clk_",ID,"_",T,?E] || {T,_,_} <- CLOCKS],
+       [ [?T,"state_t  st_", M#machine.name,?E] || M <- MACHINES ],
+       if STATES =:= [] ->
+	       [];
+	  true ->
+	       [?T, "state_t   st_", ID, ?E]
+       end,
+       "} ", ID, "_ctx_t", ?E
+     ],
      ?N,
-     [ "extern int timeout(int tm)",?E],
-     [ "extern int start_timer(int tm)", ?E]
+     [ "extern int timer_init(timer_t* tp)", ?E],
+     [ "extern int timer_start(timer_t* tp)", ?E],
+     [ "extern int timer_stop(timer_t* tp)", ?E],
+     [ "extern int timer_timeout(timer_t* tp)",?E]
     ].
 
-init(ID,IN,_DEF,OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
+final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      ?N,
-     "void init()",?N,
+     "void final(", ID, "_ctx_t* ctx)",?N,
+     "{",?N,
+     [ [[?T,"timer_stop(&ctx->clk_",M#machine.name,"_",T,")",?E] ||
+	   {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
+     [[?T,"timer_stop(&ctx->clk_",ID,"_",T,")",?E] || {T,_,_} <- CLOCKS],
+     "}",?N
+    ].
+
+
+init(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
+    [
+     ?N,
+     "void init(", ID, "_ctx_t* ctx)",?N,
      "{",?N,
      %% load input from formula
-     [ [?T,["input[",ID,"_",Name],"] = 0",?E] ||
+     [ [?T,["ctx->input[IN_",ID,"_",Name],"] = 0",?E] ||
 	 {Name,_,_Pred} <- IN],
-     [ [?T,"output[OUT_",[ID,"_",Name],"] = 0",?E] ||
+     [ [?T,"ctx->output[OUT_",[ID,"_",Name],"] = 0",?E] ||
 	 {Name,_,Sat} <- OUT,Sat =/= undefined],
 
-     [ [?T,"state[ST_",M#machine.name,"_state] = ",
+     [ [[?T,"timer_init(&ctx->clk_",M#machine.name,"_",T,")",?E] ||
+	   {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
+     [[?T,"timer_init(&ctx->clk_",ID,"_",T,")",?E] || {T,_,_} <- CLOCKS],
+     
+     [ [?T,"ctx->st_",M#machine.name," = ",
 	[M#machine.name,"_",hd(state_names(M#machine.states))],?E] ||
 	 M <- MACHINES],
-
      if STATES =:= [] ->
 	     [];
 	true ->
-	     [?T,"state[ST_",ID,"_state] = ",
+	     [?T,"ctx->st_",ID," = ",
 	      [ID,"_",hd(state_names(STATES))],?E]
      end,
      "}",?N
@@ -85,7 +111,7 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
 main(ID,IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
     [
      ?N,
-     "void machine()",?N,
+     "void machine(", ID, "_ctx_t* ctx)",?N,
      "{",?N,
      [ [?T,"digital_t ", [ID,"_",Name], ?E] || 
 	 {Name,_,_Pred} <- IN],
@@ -108,14 +134,14 @@ main(ID,IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
 	     [[?T,[Mid,"_",Name]," = ",formula(ID,def,Sat),?E] || 
 		 {Name,_,Sat} <- M#machine.def,Sat =/= undefined],
 	     code_trans(Mid, M#machine.trans),
-	     [ [?T,"output[OUT_",[Mid,"_",Name],"] = ",
+	     [ [?T,"ctx->output[OUT_",[Mid,"_",Name],"] = ",
 		formula(Mid,out,Sat),?E] || 
 		 {Name,_,Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      
      code_trans(ID, TRANS),
-     [ [?T,"output[OUT_",[ID,"_",Name],"] = ",
+     [ [?T,"ctx->output[OUT_",[ID,"_",Name],"] = ",
 	formula(ID,out,Sat),?E] || 
 	 {Name,_,Sat} <- OUT,Sat =/= undefined],
      "}",?N
@@ -124,17 +150,17 @@ main(ID,IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
 code_trans(_ID,[]) ->
     [];
 code_trans(ID,TRs) ->
-    [?T,"switch(state[ST_",ID,"_state]",") {",?N,
-     [[ [?T,?T,"case ",[ID,"_",From],":",?N,
-	 [ [?T,?T,?T,"if (", formula(ID,trans,Cond), ") {",?N,
-	    ?T,?T,?T,?T,"state[ST_",ID,"_state] = ",
+    [?T,"switch(ctx->st_",ID,") {",?N,
+     [[ [?T,"case ",[ID,"_",From],":",?N,
+	 [ [?T,?T,"if (", formula(ID,trans,Cond), ") {",?N,
+	    ?T,?T,?T,"ctx->st_",ID," = ",
 	    [ID,"_",To],";",
-	    tlist(ID,Start,[?N,?T,?T,?T,?T]),?N,
-	    ?T,?T,?T,?T,"break",?E,
-	    ?T,?T,?T,"}",?N] || {Cond,To,Start} <- FromGroup],
-	 [?T,?T,?T,"break",?E]]
+	    tlist(ID,Start,[?N,?T,?T,?T]),?N,
+	    ?T,?T,?T,"break",?E,
+	    ?T,?T,"}",?N] || {Cond,To,Start} <- FromGroup],
+	 [?T,?T,"break",?E]]
       ] || {From,FromGroup} <- group_trans(TRs)],
-     [?T,?T,"default: break",?E],
+     [?T,"default: break",?E],
      [?T,"}",?N]].
 
      
@@ -155,27 +181,6 @@ enum_out(MID, OUT, Ms) ->
 	[[MID,"_","NUM_OUTPUT"]],
     ["enum {",?N,
      arglist(Ouput,?T,",",?N),?N,
-     "}", ?E].
-
-enum_states(ID, []) ->
-    States = [["ST_",ID,"_","state"], [ID,"_","NUM_MACHINES"]],
-    ["enum {",?N,
-     arglist(States,?T,",",?N),?N,
-     "}", ?E];
-enum_states(ID, MACHINE_NAMES) ->
-    States = [["ST_",M,"_","state"] || M <- MACHINE_NAMES] ++
-	[[ID,"_","NUM_MACHINES"]],
-    ["enum {",?N,
-     arglist(States,?T,",",?N),?N,
-     "}", ?E].
-
-enum_clocks(ID,CLOCKS,MACHINES) ->
-    Clocks = [["CLK_",ID,"_",CID] || {CID,_Ln,_} <- CLOCKS] ++
-	lists:append([[["CLK_",M#machine.name,"_",CID] || 
-			  {CID,_Ln,_} <- M#machine.clocks] || M<-MACHINES]) ++
-	[[ID,"_","NUM_CLOCKS"]],
-    ["enum {",?N,
-     arglist(Clocks,?T,",",?N),?N,
      "}", ?E].
 
 %% sort items according to the order of Keys
@@ -214,21 +219,21 @@ group_trans_(From, [{From1,Cond,To,Start}|TRs], FromList, Acc) ->
 group_trans_(From, [], FromList, Acc) ->
     lists:reverse([{From,FromList}|Acc]).
 
-expand_trans([{To,_Ln0,FromList} | TRs]) ->
-    [{From,Cond,To,Start} || {From,_Ln1,Cond,Start} <- FromList] ++
+expand_trans([{From,_Ln0,FromList} | TRs]) ->
+    [{From,Cond,To,Start} || {To,_Ln1,Cond,Start} <- FromList] ++
 	expand_trans(TRs);
 expand_trans([]) ->
     [].
 
 tlist(_ID,[],_Sep) -> [];
-tlist(ID,[{T,_Ln}|Ts],Sep) -> 
-    [Sep,"start_timer(",ID,"_",T,");" | tlist(ID,Ts,Sep)].
+tlist(ID,[{T,_Ln}|Ts],Sep) ->
+    [Sep,"timer_start(&ctx->clk_",ID,"_",T,");" | tlist(ID,Ts,Sep)].
 
 arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];
 arglist([A|As],Pre,Sep,Del) -> [Pre,A,Sep,Del | arglist(As,Pre,Sep,Del)].
 
-formula(SELF,in,Name,undefined) -> ["input[IN_",fid(SELF,Name),"]"];
+formula(SELF,in,Name,undefined) -> ["ctx->input[IN_",fid(SELF,Name),"]"];
 formula(SELF,Type,_Name,F) -> formula(SELF,Type,F).
 
 formula(_SELF,_Type,0)    -> "0";
@@ -236,11 +241,12 @@ formula(_SELF,_Type,1)    -> "1";
 formula(SELF,trans,{in,ID})  -> fid(SELF,ID);
 formula(SELF,out,{in,ID})    -> fid(SELF,ID);
 formula(SELF,def,{in,ID})    -> fid(SELF,ID);
-formula(SELF,_Type,{in,ID})  -> ["input[IN_",fid(SELF,ID),"]"];
-formula(SELF,_Type,{out,ID}) -> ["output[OUT_",fid(SELF,ID),"]"];
+formula(SELF,_Type,{in,ID})  -> ["ctx->input[IN_",fid(SELF,ID),"]"];
+formula(SELF,_Type,{out,ID}) -> ["ctx->output[OUT_",fid(SELF,ID),"]"];
 formula(SELF,_Type,{def,ID}) -> fid(SELF,ID);
-formula(SELF,_Type,{state,ID}) ->  ["(state[ST_",mid(SELF,ID),"_state] == ",fid(SELF,ID),")"];
-formula(SELF,_Type,{timeout,ID}) -> ["timeout(CLK_",fid(SELF,ID),")"];
+formula(SELF,_Type,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];
+formula(SELF,_Type,{timeout,ID}) ->
+    ["timer_timeout(&ctx->clk_",fid(SELF,ID),")"];
 formula(SELF,Type,{'&&',L,R}) ->
     ["(",formula(SELF,Type,L),") && (",formula(SELF,Type,R),")"];
 formula(SELF,Type,{'||',L,R}) ->

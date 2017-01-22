@@ -39,6 +39,7 @@ machine([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) 
     {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es3),
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
     {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
+    %% FIXME: check that all state has rules
     {TRANS1,Es7} = lint_trans(Trans,[],Sym2,Es6),
     {#machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
 	      states=STATES1,trans=TRANS1},Es7}.
@@ -88,6 +89,7 @@ lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
     {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es1),
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
     {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
+    %% FIXME: check that all state has rules
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
     M = #machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
 		 states=STATE,trans=TRANS1},

@@ -1,39 +1,81 @@
--module(example).
--export([main/0]).
--export([main/3]).
+-module('example').
+-export([main/0,wait/3,loop/3,final/0]).
+-define(BOOL(X), if (X) -> 1; true -> 0 end).
 
-main() ->
-  main(s_state1,#{ i_x1=>false,i_x2=>false,i_x3=>false},#{ o_z1=>false}).
 
-main(S0,I0,O0) ->
+main() -> 
+    wait(
+    #{
+        'example_state' => 'state1'
+    },
+    #{
+        'example_x1' => 0,
+        'example_x2' => 0,
+        'example_x3' => 0
+    },
+    #{
+        'example_z1' => 0
+    }).
+
+final() ->
+    erlister_rt:stop_timer(clk_example_T),
+    ok.
+
+
+wait(STATE,IN,OUT) ->
     receive
-	{timeout,_Ref,_} -> update(S0,I0,O0);
-	I -> update(S0,maps:merge(I0,I),O0)
+        {timeout,_Ref,_} -> loop(STATE,IN,OUT);
+        INPUT -> loop(STATE,maps:merge(INPUT,IN),OUT)
     end.
-      
-update(S0,I1 = #{ i_x1:=I_x1,i_x2:=I_x2,i_x3:=I_x3},O0) ->
-    D_y1 = (I_x2) andalso (I_x1),
-    T_T = read_timer('T'),
-    S1 = case S0 of
-	     s_state1 when ((T_T =:= timeout)) andalso (not (I_x3)) -> s_state3;
-	     s_state3 when I_x3 -> start_timer('T'), s_state2;
-	     s_state1 when (not (I_x3)) andalso (not (D_y1)) -> s_state2;
-	     s_state2 when D_y1 -> s_state1;
-	     _ -> S0
-	 end,
-    O_z1 = (not ((S1 =:=s_state1))) andalso (D_y1),
-    main(S1, I1, O0#{ o_z1=>O_z1}).
 
-start_timer(Name) ->
-    T = erlang:start_timer(2000, self(), Name),
-    put(Name, T).
 
-read_timer(Name) ->
-    case get(Name) of
-	undefined -> undefined;
-	T when is_reference(T) ->
-	    case erlang:read_timer(T) of
-		false -> timeout;
-		_ -> running
-	    end
-    end.
+loop(
+    STATE = #{
+        'example_state' := ST_example
+    },
+    IN = #{
+        'example_x1' := I_example_x1,
+        'example_x2' := I_example_x2,
+        'example_x3' := I_example_x3
+    },
+    OUT = #{
+        'example_z1' := O_example_z1
+    }) ->
+    IN_example_x1 = I_example_x1,
+    IN_example_x2 = I_example_x2,
+    IN_example_x3 = I_example_x3,
+    DEF_example_y1 = (IN_example_x2) andalso (IN_example_x1),
+    CLK_example_T = erlister_rt:timer_read(clk_example_T),
+    ST_example1 = 
+        case (ST_example) of
+        'state1' ->
+            if
+                DEF_example_y1 ->
+                    'state2';
+                true -> ST_example
+            end;
+        'state2' ->
+            if
+                (not (IN_example_x3)) andalso (not (DEF_example_y1)) ->
+                    'state1';
+                IN_example_x3 ->
+                    erlister_rt:timer_start(clk_example_T,2000),
+                    'state3';
+                true -> ST_example
+            end;
+        'state3' ->
+            if
+                ((CLK_example_T =:= timeout)) andalso (not (IN_example_x2)) ->
+                    'state1';
+                true -> ST_example
+            end;
+        _ -> ST_example
+        end,
+    OUT_example_z1 = ?BOOL((not ((ST_example =:= 'state1'))) andalso (DEF_example_y1)),
+    wait(STATE#{
+        'example_state' => ST_example1
+    },
+    IN,
+    OUT#{
+        'example_z1' => OUT_example_z1
+    }).

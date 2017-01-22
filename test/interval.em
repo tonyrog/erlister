@@ -4,7 +4,7 @@
 
 machine interval;
 
-submachines alternate, springback;
+submachines springback, alternate;
 
 in button;
 
