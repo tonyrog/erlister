@@ -71,6 +71,10 @@ wait(_ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
 
 
 init(ID,IN,_DEF,OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
+    OUT_LIST = [[?Q,ID,"_",Name,?Q]||{Name,_,Sat} <- OUT,Sat =/= undefined] ++
+	lists:append([ [[?Q,M#machine.name,"_",Name,?Q] ||
+			   {Name,_,Sat} <- M#machine.out,Sat =/= undefined] ||
+			 M <- MACHINES]),
     [
      ?N,
      "main() -> ",?N,
@@ -95,15 +99,19 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
       ?T,"}",",",?N,
       %% OUTPUT
       ?T,"#{",?N,
-      arglist([ [[?Q,ID,"_",Name,?Q]," => 0"] ||
-		 {Name,_,Sat} <- OUT,Sat =/= undefined],
-	      [?T,?T],",",?N),?N,
+      arglist([[X," => 0"] || X <- OUT_LIST ],
+	      [?T,?T],",",?N),
+      ?N,
       ?T,"}).",?N
      ]
     ].
 
 
 loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
+    OUT_LIST = [{ID,Name} ||{Name,_,Sat} <- OUT,Sat =/= undefined] ++
+	lists:append([ [{M#machine.name,Name} ||
+			   {Name,_,Sat} <- M#machine.out,Sat =/= undefined] ||
+			 M <- MACHINES]),
     [
      ?N,
      "loop(",?N,
@@ -129,9 +137,9 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
      ?T,"}",",",?N,
      %% OUTPUT
      ?T,"OUT = #{",?N,
-     arglist([ [[?Q,ID,"_",Name,?Q]," := ",
-		["O_",ID,"_",Name]] ||
-		 {Name,_,Sat} <- OUT,Sat =/= undefined],
+     arglist([ [[?Q,M,"_",Name,?Q]," := ",
+		["OUT_",M,"_",Name]] ||
+		 {M,Name} <- OUT_LIST],
 	     [?T,?T],",",?N),?N,
      ?T,"}) ->", ?N,
      %% load input from formula
@@ -155,35 +163,35 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 	       "erlister_rt:read_timer(", "clk_",ID,"_",T,"),",?N] ||
 		 {T,_,_} <- M#machine.clocks],
 	     code_trans(Mid, M#machine.trans),
-	     [ [?T,"OUT_",[Mid,"_",Name]," = ?BOOL(",
+	     [ [?T,"OUT1_",[Mid,"_",Name]," = ?BOOL(",
 		formula(Mid,out,Sat),")",",",?N] || 
 		 {Name,_,Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      
      code_trans(ID, TRANS),
-     [ [?T,"OUT_",[ID,"_",Name]," = ?BOOL(",
+     [ [?T,"OUT1_",[ID,"_",Name]," = ?BOOL(",
 	formula(ID,out,Sat),")",",",?N] || 
 	 {Name,_,Sat} <- OUT,Sat =/= undefined],
 
      ?T, "wait(STATE#{",?N,
      arglist([ [?T,?T,?Q,M#machine.name,"_state",?Q," => ",
-		["ST_",M#machine.name,"1"]] ||
+		["ST1_",M#machine.name]] ||
 		 M <- MACHINES],
 	     [?T,?T],",",?N),
      if STATES =:= [] ->
 	     [];
 	true ->
 	     [?T,?T,?Q,ID,"_state",?Q," => ",
-	      ["ST_",ID,"1"],?N]
+	      ["ST1_",ID],?N]
      end,
      ?T, "}",",",?N,
      ?T,"IN,",?N,
      %% OUTPUT
      ?T,"OUT#{",?N,
-     arglist([ [[?Q,ID,"_",Name,?Q]," => ",
-		["OUT_",ID,"_",Name]] ||
-		 {Name,_,Sat} <- OUT,Sat =/= undefined],
+     arglist([ [[?Q,M,"_",Name,?Q]," => ",
+		["OUT1_",M,"_",Name]] ||
+		 {M,Name} <- OUT_LIST],
 	     [?T,?T],",",?N),?N,
      ?T,"}).", ?N
     ].
@@ -191,7 +199,7 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 code_trans(_ID,[]) ->
     [];
 code_trans(ID,TRs) ->
-    [?T,"ST_",ID,"1 = ",?N,
+    [?T,"ST1_",ID," = ",?N,
      ?T,?T,"case (ST_",ID,") of",?N,
      [[ [?T,?T,[?Q,From,?Q]," ->",?N,
 	 [?T,?T,?T,"if",?N],
@@ -259,9 +267,11 @@ formula(_SELF,_Type,0)    -> "true";
 formula(_SELF,_Type,1)    -> "false";
 formula(SELF,in,{in,ID})    ->  ["I_",fid(SELF,ID)];
 formula(SELF,_Type,{in,ID})  -> ["IN_",fid(SELF,ID)];
-formula(SELF,_Type,{out,ID}) -> ["O_",fid(SELF,ID)];
+formula(SELF,_Type,{out,ID}) ->
+    %% FIXME OUT1 must be used if SELF.ID is redefined
+    ["OUT_",fid(SELF,ID)];
 formula(SELF,_Type,{def,ID}) -> ["DEF_",fid(SELF,ID)];
-formula(SELF,out,{state,ID}) ->  ["(ST_",mid(SELF,ID),"1"," =:= ",
+formula(SELF,out,{state,ID}) ->  ["(ST1_",mid(SELF,ID)," =:= ",
 				  ?Q,fld(ID),?Q,")"];
 formula(SELF,_Type,{state,ID}) ->  ["(ST_",mid(SELF,ID)," =:= ",
 				    ?Q,fld(ID),?Q,")"];
