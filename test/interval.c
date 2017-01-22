@@ -1,90 +1,103 @@
-// C code generated from interval.em
 typedef unsigned char  digital_t;
 typedef unsigned short analog_t;
 typedef unsigned long  timer_t;
 typedef unsigned char  state_t;
 
-typedef enum {
-  interval_button,
-  interval_NUM_INPUT
-} interval_input_t;
+enum {
+    IN_interval_button,
+    interval_NUM_INPUT
+};
 
-typedef enum {
-  interval_value,
-  alternate_value,
-  springback_value,
-  interval_NUM_OUTPUT
-} interval_output_t;
+enum {
+    OUT_interval_value,
+    OUT_springback_value,
+    OUT_alternate_value,
+    interval_NUM_OUTPUT
+};
 
-typedef enum {
-  alternate_Tl,
-  alternate_Th,
-  interval_NUM_CLOCKS
-} interval_clocks_t;
 
-typedef enum {
-  alternate_low,
-  alternate_high
-} alternate_state_t;
+enum {
+    springback_off,
+    springback_on
+};
 
-typedef enum {
-  springback_off,
-  springback_on
-} springback_state_t;
+enum {
+    alternate_low,
+    alternate_high
+};
 
-typedef enum {
-  alternate_state,
-  springback_state,
-  interval_NUM_MACHINES
-} springback_states_t;
+typedef struct {
+    digital_t input[interval_NUM_INPUT];
+    digital_t output[interval_NUM_OUTPUT];
+    timer_t   clk_alternate_Th;
+    timer_t   clk_alternate_Tl;
+    state_t  st_springback;
+    state_t  st_alternate;
+} interval_ctx_t;
 
-digital_t input[interval_NUM_INPUT];
-digital_t output[interval_NUM_OUTPUT];
-state_t   state[interval_NUM_MACHINES];
+extern int timer_init(timer_t* tp);
+extern int timer_start(timer_t* tp);
+extern int timer_stop(timer_t* tp);
+extern int timer_timeout(timer_t* tp);
 
-extern int timeout(int tm);
-extern int start_timer(int tm);
-
-void machine()
+void init(interval_ctx_t* ctx)
 {
-  digital_t alternate_enable;
-  digital_t springback_button;
+    ctx->input[IN_interval_button] = 0;
+    ctx->output[OUT_interval_value] = 0;
+    timer_init(&ctx->clk_alternate_Th);
+    timer_init(&ctx->clk_alternate_Tl);
+    ctx->st_springback = springback_off;
+    ctx->st_alternate = alternate_low;
+}
 
-  alternate_enable = output[springback_value];
-  switch(state[alternate_state]) {
-    case alternate_high:
-      if ((timeout(alternate_Th)) && (alternate_enable)) {
-        state[alternate_state] = alternate_low;
-        start_timer(Tl);
-        break;
-      }
-      break;
-    case alternate_low:
-      if ((timeout(alternate_Tl)) && (alternate_enable)) {
-        state[alternate_state] = alternate_high;
-        start_timer(Th);
-        break;
-      }
-      break;
-    default: break;
-  }
-  output[alternate_value] = (state[alternate_state] == alternate_high);
-  springback_button = input[interval_button];
-  switch(state[springback_state]) {
+void final(interval_ctx_t* ctx)
+{
+    timer_stop(&ctx->clk_alternate_Th);
+    timer_stop(&ctx->clk_alternate_Tl);
+}
+
+void machine(interval_ctx_t* ctx)
+{
+    digital_t interval_button;
+    digital_t springback_button;
+    digital_t alternate_enable;
+
+    interval_button = ctx->input[IN_interval_button];
+    springback_button = ctx->input[IN_interval_button];
+    switch(ctx->st_springback) {
     case springback_off:
-      if (springback_button) {
-        state[springback_state] = springback_on;
+        if (springback_button) {
+            ctx->st_springback = springback_on;
+            break;
+        }
         break;
-      }
-      break;
     case springback_on:
-      if (springback_button) {
-        state[springback_state] = springback_off;
+        if (springback_button) {
+            ctx->st_springback = springback_off;
+            break;
+        }
         break;
-      }
-      break;
     default: break;
-  }
-  output[springback_value] = (state[springback_state] == springback_on);
-  output[interval_value] = (output[alternate_value]) && (output[springback_value]);
+    }
+    ctx->output[OUT_springback_value] = (ctx->st_springback == springback_on);
+    alternate_enable = ctx->output[OUT_springback_value];
+    switch(ctx->st_alternate) {
+    case alternate_high:
+        if ((timer_timeout(&ctx->clk_alternate_Tl)) && (alternate_enable)) {
+            ctx->st_alternate = alternate_low;
+            timer_start(&ctx->clk_alternate_Th);
+            break;
+        }
+        break;
+    case alternate_low:
+        if ((timer_timeout(&ctx->clk_alternate_Th)) && (alternate_enable)) {
+            ctx->st_alternate = alternate_high;
+            timer_start(&ctx->clk_alternate_Tl);
+            break;
+        }
+        break;
+    default: break;
+    }
+    ctx->output[OUT_alternate_value] = (ctx->st_alternate == alternate_high);
+    ctx->output[OUT_interval_value] = (ctx->output[OUT_alternate_value]) && (ctx->output[OUT_springback_value]);
 }
