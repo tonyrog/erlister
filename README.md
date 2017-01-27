@@ -123,10 +123,10 @@ note that not all parts are valid in all sections.
 
     <digit> := "0".."9"
     <letter> := "a".."z"|"A".."Z"|"_"
-    <identifer> := <letter>(<letter>|<digit>)*
+    <identifier> := <letter>(<letter>|<digit>)*
     <constant> := "0" | "1"
     <number> := <digit>+
-    <arg> := <number> | <identifer>
+    <arg> := <number> | <identifier>
 
     <formula> ::= <constant>
               | <identifier>
@@ -137,8 +137,8 @@ note that not all parts are valid in all sections.
               | <formula> "||" <formula>
               | <formula> "->" <formula>
               | <formula> "<->" <formula>
-              | "ALL" <identifer> <formula>
-              | "SOME" <identifer> <formula>
+              | "ALL" <identifier> <formula>
+              | "SOME" <identifier> <formula>
 
 # Roadmap
 
