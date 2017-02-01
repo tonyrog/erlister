@@ -38,21 +38,29 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
 
 declare(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
     [
-     "typedef unsigned char  digital_t",?E,
-     "typedef unsigned short analog_t",?E,
+     "#include <stdint.h>",?N,
+     "typedef uint8_t  boolean",?E,
+     "typedef uint8_t  unsigned8",?E,
+     "typedef uint16_t unsigned16",?E,
+     "typedef uint32_t unsigned32",?E,
+     "typedef int8_t   integer8",?E,
+     "typedef int16_t  integer16",?E,
+     "typedef int32_t  integer32",?E,
      "typedef unsigned long  timer_t",?E,
      "typedef unsigned char  state_t",?E,
      ?N,
-     enum_in(ID, IN),?N,
-     enum_out(ID, OUT, [{M#machine.name,M#machine.out}||M<-MACHINES]),?N,
+     %% enum_in(ID, IN),?N,
+     %% enum_out(ID, OUT, [{M#machine.name,M#machine.out}||M<-MACHINES]),?N,
      enum_state(ID, STATES),?N,
      [ [enum_state(M#machine.name, M#machine.states),?N] || M <- MACHINES ],
      [ "typedef struct {", ?N,
-       [ ?T, "digital_t input[",ID,"_","NUM_INPUT]",?E],
-       [ ?T, "digital_t output[",ID,"_","NUM_OUTPUT]",?E],
+       [ [ ?T, atom_to_list(Type), " ", "in_",ID,"_",Name,?E] ||
+	   #var{id=Name,type=Type} <- IN],
+       [ [ ?T, atom_to_list(Type), " ", "out_",ID,"_",Name,?E] ||
+	   #var{id=Name,type=Type} <- OUT],
        [ [[?T,"timer_t   ", "clk_",M#machine.name,"_",T,?E] ||
-	     {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
-       [ [?T,"timer_t  clk_",ID,"_",T,?E] || {T,_,_} <- CLOCKS],
+	     #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
+       [ [?T,"timer_t  clk_",ID,"_",T,?E] || #clock{id=T} <- CLOCKS],
        [ [?T,"state_t  st_", M#machine.name,?E] || M <- MACHINES ],
        if STATES =:= [] ->
 	       [];
@@ -74,8 +82,8 @@ final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
      "void final(", ID, "_ctx_t* ctx)",?N,
      "{",?N,
      [ [[?T,"timer_stop(&ctx->clk_",M#machine.name,"_",T,")",?E] ||
-	   {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
-     [[?T,"timer_stop(&ctx->clk_",ID,"_",T,")",?E] || {T,_,_} <- CLOCKS],
+	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
+     [[?T,"timer_stop(&ctx->clk_",ID,"_",T,")",?E] || #clock{id=T} <- CLOCKS],
      "}",?N
     ].
 
@@ -86,14 +94,14 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
      "void init(", ID, "_ctx_t* ctx)",?N,
      "{",?N,
      %% load input from formula
-     [ [?T,["ctx->input[IN_",ID,"_",Name],"] = 0",?E] ||
-	 {Name,_,_Pred} <- IN],
-     [ [?T,"ctx->output[OUT_",[ID,"_",Name],"] = 0",?E] ||
-	 {Name,_,Sat} <- OUT,Sat =/= undefined],
+     [ [?T,["ctx->in_",ID,"_",Name]," = 0",?E] ||
+	 #var{id=Name} <- IN],
+     [ [?T,"ctx->out_",[ID,"_",Name]," = 0",?E] ||
+	 #var{id=Name,expr=Expr} <- OUT,Expr =/= undefined],
 
      [ [[?T,"timer_init(&ctx->clk_",M#machine.name,"_",T,")",?E] ||
-	   {T,_,_} <- M#machine.clocks] || M <- MACHINES ],
-     [[?T,"timer_init(&ctx->clk_",ID,"_",T,")",?E] || {T,_,_} <- CLOCKS],
+	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
+     [[?T,"timer_init(&ctx->clk_",ID,"_",T,")",?E] || #clock{id=T} <- CLOCKS],
      
      [ [?T,"ctx->st_",M#machine.name," = ",
 	[M#machine.name,"_",hd(state_names(M#machine.states))],?E] ||
@@ -107,43 +115,42 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
      "}",?N
     ].
 
-
 main(ID,IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
     [
      ?N,
      "void machine(", ID, "_ctx_t* ctx)",?N,
      "{",?N,
-     [ [?T,"digital_t ", [ID,"_",Name], ?E] || 
-	 {Name,_,_Pred} <- IN],
-     [ [?T,"digital_t ", [ID,"_",Name], ?E] || 
-	 {Name,_,Sat} <- DEF,Sat =/= undefined],
-     [ [[?T,"digital_t ", [M#machine.name,"_",Name], ?E] || 
-	   {Name,_,_} <- M#machine.in] || M <- MACHINES],
+     [ [?T,atom_to_list(Type)," ",[ID,"_",Name], ?E] || 
+	 #var{id=Name,type=Type} <- IN],
+     [ [?T,atom_to_list(Type)," ", [ID,"_",Name], ?E] || 
+	 #var{id=Name,type=Type,expr=Expr} <- DEF,Expr =/= undefined],
+     [ [[?T,atom_to_list(Type)," ", [M#machine.name,"_",Name], ?E] || 
+	   #var{id=Name,type=Type} <- M#machine.in] || M <- MACHINES],
      ?N,
      %% load input from formula
-     [ [?T,[ID,"_",Name]," = ",formula(ID,in,Name,Pred),?E] ||
-	 {Name,_,Pred} <- IN],
+     [ [?T,[ID,"_",Name]," = ",formula(ID,in,Name,Expr),?E] ||
+	 #var{id=Name,expr=Expr} <- IN],
 
-     [ [?T,[ID,"_",Name]," = ",formula(ID,def,Sat),?E] ||
-	 {Name,_,Sat} <- DEF, Sat =/= undefined ],
+     [ [?T,[ID,"_",Name]," = ",formula(ID,def,Expr),?E] ||
+	 #var{id=Name,expr=Expr} <- DEF,Expr =/= undefined ],
 
      [ begin
 	   Mid = M#machine.name,
 	   [ [[?T,[Mid,"_",Name]," = ",formula(ID,in,Pred),?E] || 
-		 {Name,_,Pred} <- M#machine.in,Pred =/= undefined],
+		 #var{id=Name,expr=Pred} <- M#machine.in,Pred =/= undefined],
 	     [[?T,[Mid,"_",Name]," = ",formula(ID,def,Sat),?E] || 
-		 {Name,_,Sat} <- M#machine.def,Sat =/= undefined],
+		 #var{id=Name,expr=Sat} <- M#machine.def,Sat =/= undefined],
 	     code_trans(Mid, M#machine.trans),
-	     [ [?T,"ctx->output[OUT_",[Mid,"_",Name],"] = ",
+	     [ [?T,"ctx->out_",[Mid,"_",Name]," = ",
 		formula(Mid,out,Sat),?E] || 
-		 {Name,_,Sat} <- M#machine.out,Sat =/= undefined]
+		 #var{id=Name,expr=Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      
      code_trans(ID, TRANS),
-     [ [?T,"ctx->output[OUT_",[ID,"_",Name],"] = ",
-	formula(ID,out,Sat),?E] || 
-	 {Name,_,Sat} <- OUT,Sat =/= undefined],
+     [ [?T,"ctx->out_",[ID,"_",Name]," = ",
+	formula(ID,out,Sat),?E] ||
+	 #var{id=Name,expr=Sat} <- OUT,Sat =/= undefined],
      "}",?N
     ].
 
@@ -164,25 +171,6 @@ code_trans(ID,TRs) ->
      [?T,"}",?N]].
 
      
-enum_in(_MID, []) ->
-    [];
-enum_in(MID, IN) ->
-    Input = [["IN_",MID,"_",I] || {I,_Ln,_Pred} <- IN] ++
-	[[MID,"_","NUM_INPUT"]],
-    ["enum {",?N,
-     arglist(Input,?T,",",?N),?N,
-     "}", ?E].
-
-enum_out(_MID, [], _Ms) ->
-    [];
-enum_out(MID, OUT, Ms) ->
-    Ouput = [["OUT_",MID,"_",O] || {O,_Ln,_Sat} <- OUT] ++
-	lists:append([ [["OUT_",Mid,"_",Mo] || {Mo,_Ln,_Sat} <- Mout] || {Mid,Mout} <- Ms]) ++
-	[[MID,"_","NUM_OUTPUT"]],
-    ["enum {",?N,
-     arglist(Ouput,?T,",",?N),?N,
-     "}", ?E].
-
 %% sort items according to the order of Keys
 sort_by_keys(Items,Pos,Keys) ->
     lists:sort(
@@ -197,12 +185,12 @@ index_(Key,[Key|_],I) -> I;
 index_(Key,[_|Keys],I) -> index_(Key,Keys,I+1).
 
 state_names(STATES) ->    
-    [S || {S,_Ln} <- STATES].
+    [S || #state{id=S} <- STATES].
     
 enum_state(_MID, []) -> 
     [];
 enum_state(MID, STATES) ->
-    States = [[MID,"_",S] || S <- state_names(STATES)],
+    States = [[MID,"_",S] || #state{id=S} <- STATES],
     ["enum {",?N,
      arglist(States,?T,",",?N),?N,
      "}", ?E].
@@ -233,31 +221,61 @@ arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];
 arglist([A|As],Pre,Sep,Del) -> [Pre,A,Sep,Del | arglist(As,Pre,Sep,Del)].
 
-formula(SELF,in,Name,undefined) -> ["ctx->input[IN_",fid(SELF,Name),"]"];
-formula(SELF,Type,_Name,F) -> formula(SELF,Type,F).
+formula(SELF,in,Name,undefined) -> ["ctx->in_",fid(SELF,Name)];
+formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
 
-formula(_SELF,_Type,0)    -> "0";
-formula(_SELF,_Type,1)    -> "1";
-formula(SELF,trans,{in,ID})  -> fid(SELF,ID);
-formula(SELF,out,{in,ID})    -> fid(SELF,ID);
-formula(SELF,def,{in,ID})    -> fid(SELF,ID);
-formula(SELF,_Type,{in,ID})  -> ["ctx->input[IN_",fid(SELF,ID),"]"];
-formula(SELF,_Type,{out1,ID}) -> ["ctx->output[OUT_",fid(SELF,ID),"]"];
-formula(SELF,_Type,{out,ID}) -> ["ctx->output[OUT_",fid(SELF,ID),"]"];
-formula(SELF,_Type,{def,ID}) -> fid(SELF,ID);
-formula(SELF,_Type,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];
-formula(SELF,_Type,{timeout,ID}) ->
+formula(_SELF,_Class,{const,C})        -> integer_to_list(C);
+formula(SELF,trans,{in,ID,boolean})    -> fid(SELF,ID);
+formula(SELF,trans,{in,ID,_Type})      -> fid(SELF,ID);
+formula(SELF,out,{in,ID,boolean})      -> fid(SELF,ID);
+formula(SELF,out,{in,ID,_Type})        -> fid(SELF,ID);
+formula(SELF,def,{in,ID,boolean})      -> fid(SELF,ID);
+formula(SELF,def,{in,ID,_Type})        -> fid(SELF,ID);
+formula(SELF,_Class,{in,ID,boolean})   -> ["ctx->in_",fid(SELF,ID)];
+formula(SELF,_Class,{in,ID,_Type})     -> ["ctx->in_",fid(SELF,ID)];
+formula(SELF,_Class,{out1,ID,boolean}) -> ["ctx->out_",fid(SELF,ID)];
+formula(SELF,_Class,{out1,ID,_Type})   -> ["ctx->out_",fid(SELF,ID)];
+formula(SELF,_Class,{out,ID,boolean})  -> ["ctx->out_",fid(SELF,ID)];
+formula(SELF,_Class,{out,ID,_Type})    -> ["ctx->out_",fid(SELF,ID)];
+formula(SELF,_Class,{def,ID,boolean})  -> fid(SELF,ID);
+formula(SELF,_Class,{def,ID,_Type})    -> fid(SELF,ID);
+formula(SELF,_Class,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];
+formula(SELF,_Class,{timeout,ID}) ->
     ["timer_timeout(&ctx->clk_",fid(SELF,ID),")"];
-formula(SELF,Type,{'&&',L,R}) ->
-    ["(",formula(SELF,Type,L),") && (",formula(SELF,Type,R),")"];
-formula(SELF,Type,{'||',L,R}) ->
-    ["(",formula(SELF,Type,L),") || (",formula(SELF,Type,R),")"];
-formula(SELF,Type,{'->',L,R}) ->
-    ["!(",formula(SELF,Type,L),") || (",formula(SELF,Type,R),")"];
-formula(SELF,Type,{'<->',L,R}) -> 
-    ["(",formula(SELF,Type,L),") == (",formula(SELF,Type,R),")"];
-formula(SELF,Type,{'!',F}) -> 
-    ["!(",formula(SELF,Type,F),")"].
+formula(SELF,Class,{'&&',L,R}) ->
+    ["(",formula(SELF,Class,L),") && (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'||',L,R}) ->
+    ["(",formula(SELF,Class,L),") || (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'->',L,R}) ->
+    ["!(",formula(SELF,Class,L),") || (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'<->',L,R}) ->
+    ["(",formula(SELF,Class,L),") == (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'<',L,R}) ->
+    ["(",formula(SELF,Class,L),") < (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'<=',L,R}) ->
+    ["(",formula(SELF,Class,L),") <= (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'>',L,R}) ->
+    ["(",formula(SELF,Class,L),") > (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'>=',L,R}) ->
+    ["(",formula(SELF,Class,L),") >= (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'==',L,R}) ->
+    ["(",formula(SELF,Class,L),") == (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'!=',L,R}) ->
+    ["(",formula(SELF,Class,L),") != (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'+',L,R}) ->
+    ["(",formula(SELF,Class,L),") + (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'-',L,R}) ->
+    ["(",formula(SELF,Class,L),") - (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'*',L,R}) ->
+    ["(",formula(SELF,Class,L),") * (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'/',L,R}) ->
+    ["(",formula(SELF,Class,L),") / (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'%',L,R}) ->
+    ["(",formula(SELF,Class,L),") % (",formula(SELF,Class,R),")"];
+formula(SELF,Class,{'-',F}) ->
+    ["-(",formula(SELF,Class,F),")"];
+formula(SELF,Class,{'!',F}) -> 
+    ["!(",formula(SELF,Class,F),")"].
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.

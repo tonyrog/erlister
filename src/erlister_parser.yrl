@@ -19,27 +19,35 @@ Nonterminals
 	trans_def trans_list trans_list_item
         trans_def_list trans_def_item
         start_timer start_timer_list
-        pred_formula
-        sat_formula
+        formula
         identifier_list
         argument_list
         argument
         number
+        type
+        comp arith
 	.
 
 Terminals
-	'&&' '||' '!' '->' '<->' 'ALL' 'SOME' '1' '0'
+	'&&' '||' '!' '->' '<->' 'ALL' 'SOME'
 	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-'
+        '<=' '>=' '<' '>' '==' '!='
+        '+' '*' '/' '%'
 	'machine' 'in' 'def' 'out' 'clocks' 'states' 'trans' 'start' 'timeout'
 	'submachines' 'submachine' identifier
         flonum hexnum octnum binnum decnum
+        boolean unsigned8 unsigned16 unsigned32
+        integer8 integer16 integer32
 	.
 
 Left 200  '->'.
 Left 300  '<->'.
 Left 400  '||'.
 Left 500  '&&'.
-Unary 600 '!' 'ALL' 'SOME'.
+Left 600  '<' '>' '==' '!=' '<=' '>='.
+Left 700  '+' '-'.
+Left 800  '*' '/' '%'.
+Unary 1000 '!' 'ALL' 'SOME'.
 
 Rootsymbol definitions.
 
@@ -83,24 +91,24 @@ misc_def -> def_def : ['$1'].
 misc_def -> out_def : ['$1'].
 misc_def -> clocks_def : ['$1'].
 
-in_def -> 'in' in_list ';' : {in,'$2'}.
+in_def -> type 'in' in_list ';' : {in,'$1','$3'}.
 
 in_list -> identifier : ['$1'].
-in_list -> identifier '=' pred_formula : [{'=',line('$2'),'$1','$3'}].
+in_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
 in_list -> in_list ',' identifier   : '$1' ++ ['$3'].
-in_list -> in_list ',' identifier '=' pred_formula : 
+in_list -> in_list ',' identifier '=' formula : 
 	       '$1' ++ [{'=',line('$4'),'$3','$5'}].
 
-def_def -> 'def' def_list ';' : {def,'$2'}.
+def_def -> type 'def' def_list ';' : {def,'$1','$3'}.
 
-def_list -> identifier '=' sat_formula : [{'=',line('$2'),'$1','$3'}].
-def_list -> def_list ',' identifier '=' sat_formula : 
+def_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
+def_list -> def_list ',' identifier '=' formula : 
 		'$1' ++ [{'=',line('$4'),'$3','$5'}].
 
-out_def -> 'out' out_list ';' : {out,'$2'}.
+out_def -> type 'out' out_list ';' : {out,'$1','$3'}.
 
-out_list -> identifier '=' sat_formula : [{'=',line('$2'),'$1','$3'}].
-out_list -> out_list ',' identifier '=' sat_formula :
+out_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
+out_list -> out_list ',' identifier '=' formula :
 		'$1' ++ [{'=',line('$2'),'$3','$5'}].
 
 clocks_def -> 'clocks' clocks_list ';' : {clocks,'$2'}.
@@ -128,9 +136,9 @@ trans_list_item -> identifier ':' trans_def_list ';' : {'$1','$3'}.
 trans_def_list -> trans_def_item  : ['$1'].
 trans_def_list -> trans_def_list ',' trans_def_item  : '$1'++['$3'].
 
-trans_def_item -> identifier sat_formula :
+trans_def_item -> identifier formula :
 		      {'$1','$2',{start,[]}}.
-trans_def_item -> identifier sat_formula start_timer_list :
+trans_def_item -> identifier formula start_timer_list :
 		      {'$1','$2',{start,'$3'}}.
 
 start_timer_list -> start_timer    : ['$1'].
@@ -146,40 +154,49 @@ argument_list -> argument_list ',' argument : '$1'++['$3'].
 
 argument -> number : '$1'.
 argument -> identifier : '$1'.
+
+type -> boolean    : boolean.
+type -> unsigned8  : unsigned8.
+type -> unsigned16 : unsigned16.
+type -> unsigned32 : unsigned32.
+type -> integer8   : integer8.
+type -> integer16  : integer16.
+type -> integer32  : integer32.
+type -> '$empty'   : boolean.
      
+formula -> arith : '$1'.
+formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
+formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
+formula -> comp : '$1'.
+formula -> '!' formula : {'!',line('$1'),'$2'}.
+formula -> '(' formula ')' : '$2'.
+formula -> 'timeout' '(' identifier ')' : {timeout,line('$1'),'$3'}.
+formula -> formula '&&' formula : {'&&',line('$2'),'$1','$3'}.
+formula -> formula '||' formula : {'||',line('$2'),'$1','$3'}.
+formula -> formula '->' formula : {'->',line('$2'),'$1','$3'}.
+formula -> formula '<->' formula : {'<->',line('$2'),'$1','$3'}.
+formula -> 'ALL' identifier formula : {'ALL',line('$1'),'$2','$3'}.
+formula -> 'SOME' identifier formula : {'SOME',line('$1'),'$2','$3'}.
+
+comp -> arith '>'  arith : {'>',line('$1'),'$1','$3'}.
+comp -> arith '>=' arith : {'>=',line('$1'),'$1','$3'}.
+comp -> arith '<'  arith : {'<',line('$1'),'$1','$3'}.
+comp -> arith '<=' arith : {'<=',line('$1'),'$1','$3'}.
+comp -> arith '==' arith : {'==',line('$1'),'$1','$3'}.
+comp -> arith '!=' arith : {'!=',line('$1'),'$1','$3'}.
+
+arith -> argument : '$1'.
+arith -> arith '+' arith : {'+','$1','$3'}.
+arith -> arith '-' arith : {'-','$1','$3'}.
+arith -> arith '*' arith : {'*','$1','$3'}.
+arith -> arith '/' arith : {'/','$1','$3'}.
+arith -> arith '%' arith : {'%','$1','$3'}.
+
 number -> flonum : '$1'.
 number -> hexnum : '$1'.
 number -> octnum : '$1'.
 number -> binnum : '$1'.
 number -> decnum : '$1'.
-number -> '0'    : {decnum,line('$1'),"0"}.
-number -> '1'    : {decnum,line('$1'),"1"}.
-     
-sat_formula -> '0' : '$1'.
-sat_formula -> '1' : '$1'.
-sat_formula -> identifier : '$1'.
-sat_formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
-sat_formula -> '!' sat_formula : {'!',line('$1'),'$2'}.
-sat_formula -> '(' sat_formula ')' : '$2'.
-sat_formula -> 'timeout' '(' identifier ')' : {timeout,line('$1'),'$3'}.
-sat_formula -> sat_formula '&&' sat_formula : {'&&',line('$2'),'$1','$3'}.
-sat_formula -> sat_formula '||' sat_formula : {'||',line('$2'),'$1','$3'}.
-sat_formula -> sat_formula '->' sat_formula : {'->',line('$2'),'$1','$3'}.
-sat_formula -> sat_formula '<->' sat_formula : {'<->',line('$2'),'$1','$3'}.
-
-pred_formula -> '0' : '$1'.
-pred_formula -> '1' : '$1'.
-pred_formula -> identifier : '$1'.
-pred_formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
-pred_formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
-pred_formula -> '!' pred_formula : {'!',line('$1'),'$2'}.
-pred_formula -> '(' pred_formula ')' : '$2'.
-pred_formula -> pred_formula '&&' pred_formula : {'&&',line('$2'),'$1','$3'}.
-pred_formula -> pred_formula '||' pred_formula : {'||',line('$2'),'$1','$3'}.
-pred_formula -> pred_formula '->' pred_formula : {'->',line('$2'),'$1','$3'}.
-pred_formula -> pred_formula '<->' pred_formula : {'<->',line('$2'),'$1','$3'}.
-pred_formula -> 'ALL' identifier pred_formula : {'ALL',line('$1'),'$2','$3'}.
-pred_formula -> 'SOME' identifier pred_formula : {'SOME',line('$1'),'$2','$3'}.
 
 Erlang code.
 

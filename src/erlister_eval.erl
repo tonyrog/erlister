@@ -8,13 +8,18 @@
 -module(erlister_eval).
 
 -export([machine/1]).
+-export([load_predicates/0]).
 
 -include("../include/erlister.hrl").
 
 machine(M = #machine { in=IN }) ->
-    IN1 = [{I,Ln,formula(Pred)} || {I,Ln,Pred} <- IN],
+    IN1 = [var(V) || V <- IN],
     M#machine { in = IN1 }.
 
+var(V=#var{expr=Expr}) -> 
+    V#var { expr=formula(Expr) }.
+    
+     
 formula(undefined) -> undefined;
 formula(F) -> formula(F,[]).
 
@@ -68,15 +73,57 @@ formula({'<->',L,R},Vs) ->
 %%  {foo,{all,"x"},{all,"x"}}
 %%  {foo,1,{some,"Y"}}
 %% 
-pred(P,As,Vs) ->
-    As1 = eval_args(As, Vs),
+load_predicates() ->
     {ok,Ts} = application:get_env(erlister, true),
     {ok,Fs} = application:get_env(erlister, false),
     Tab = ets:new(match_tab, []),
     _ = [ ets:insert(Tab, {Ti,true}) || Ti <- Ts],
     _ = [ ets:insert(Tab, {Fi,false}) || Fi <- Fs],
+    Tab.
+    
+pred(P,As,Vs) ->
+    As1 = eval_args(As, Vs),
+    Tab = load_predicates(),
     pred_match_(Tab, list_to_atom(P), As1).
 
+%%
+%%  SOME x P(x)
+%%     M = [ {{{'P','$1'}, true}, [], [true]} ]
+%%     case ets:select(T, Match, 1) of
+%%       '$end_of_table' -> false;
+%%       {[true], _Cont} -> true
+%%     end
+%%
+%%  ALL x P(x)
+%%     M = [ {{{'P','$1'}, false}, [], [true]} ]
+%%     case ets:select(T, Match, 1) of
+%%       '$end_of_table' -> true;
+%%       {[true], _Cont} -> false
+%%     end
+%%
+%%  ALL x SOME y P(x,y)
+%%     P(1,2) P(2,2) P(3,3) P(4,2) ...
+%%  SOME x ALL y !P(x,y)
+%%
+
+%%
+%%
+
+%%
+%% ALL x ALL y P(x,y) ==
+%%   M = [ {{{'P','$1','$2'},true}, [], [true]} ]
+%%   case ets:select(T, Match, 1) of
+%%     '$end_of_table' -> false;
+%%     {[true], _Cont} -> true
+%%   end
+%%
+%% ALL x ALL y P(x,y) ==
+%%   M = [ {{{'P','$1','$2'},false}, [], [true]} ]
+%%   case ets:select(T, Match, 1) of
+%%     '$end_of_table' -> true;
+%%     {[true], _Cont} -> false
+%%   end
+%%
 pred_match_(_T, _P, _As) ->
     %% FIXME
     0.

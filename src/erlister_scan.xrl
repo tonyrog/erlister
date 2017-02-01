@@ -24,6 +24,13 @@ start		: {token,{start,TokenLine}}.
 timeout		: {token,{timeout,TokenLine}}.
 submachines	: {token,{submachines,TokenLine}}.
 submachine	: {token,{submachine,TokenLine}}.
+boolean         : {token,{boolean,TokenLine}}.
+unsigned8       : {token,{unsigned8,TokenLine}}.
+unsigned16      : {token,{unsigned16,TokenLine}}.
+unsigned32      : {token,{unsigned32,TokenLine}}.
+integer8        : {token,{integer8,TokenLine}}.
+integer16       : {token,{integer16,TokenLine}}.
+integer32       : {token,{integer32,TokenLine}}.
 
 \&\&		: {token,{'&&',TokenLine}}.
 \|\|		: {token,{'||',TokenLine}}.
@@ -33,8 +40,6 @@ submachine	: {token,{submachine,TokenLine}}.
 ALL		: {token,{'ALL',TokenLine}}.
 SOME		: {token,{'SOME',TokenLine}}.
 {D}+\.{D}*      : {token,{flonum,TokenLine,TokenChars}}.
-1		: {token,{'1',TokenLine}}.
-0		: {token,{'0',TokenLine}}.
 0[xX]{H}+	: {token,{hexnum,TokenLine,TokenChars}}.
 0[b]{B}+        : {token,{binnum,TokenLine,TokenChars}}.
 0{O}+	        : {token,{octnum,TokenLine,TokenChars}}.
@@ -51,17 +56,16 @@ SOME		: {token,{'SOME',TokenLine}}.
 -		: {token,{'-',TokenLine}}.
 //.*\n          : skip_token.
 {L}({L}|{D})*	: {token,{identifier,TokenLine,TokenChars}}.
-
-%%\+		: {token,{'+',TokenLine}}.
-%%\*		: {token,{'*',TokenLine}}.
-%%/		: {token,{'/',TokenLine}}.
-%%\%		: {token,{'%',TokenLine}}.
-%%<		: {token,{'<',TokenLine}}.
-%%>		: {token,{'>',TokenLine}}.
-%%<=		: {token,{'<=',TokenLine}}.
-%%>=		: {token,{'>=',TokenLine}}.
-%%==		: {token,{'==',TokenLine}}.
-%%!=		: {token,{'!=',TokenLine}}.
+\+		: {token,{'+',TokenLine}}.
+\*		: {token,{'*',TokenLine}}.
+/		: {token,{'/',TokenLine}}.
+\%		: {token,{'%',TokenLine}}.
+<=		: {token,{'<=',TokenLine}}.
+>=		: {token,{'>=',TokenLine}}.
+<		: {token,{'<',TokenLine}}.
+>		: {token,{'>',TokenLine}}.
+==		: {token,{'==',TokenLine}}.
+!=		: {token,{'!=',TokenLine}}.
 
 {WS}+		: skip_token .
 

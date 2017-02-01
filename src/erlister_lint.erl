@@ -70,12 +70,12 @@ lint_submachine_list_0([],Acc,_SUBMACHINES,Es) ->
 export_submachines([{submachine0,_Ln,ID,_IN,_DEF,OUT,_CLOCKS,
 		     STATES,_Trans,_Sym}|Ms],Sym) ->
     Sym1 = lists:foldl(
-	     fun({Out,Ln,_},Si) -> 
-		     maps:put([ID,".",Out],{out,Ln},Si)
+	     fun(V=#var{id=Out},Si) -> 
+		     maps:put([ID,".",Out],V,Si)
 	     end, Sym, OUT),
     Sym2 = lists:foldl(
-	     fun({State,Ln},Si) -> 
-		     maps:put([ID,".",State],{state,Ln},Si)
+	     fun(S=#state{id=State},Si) ->
+		     maps:put([ID,".",State],S,Si)
 	     end, Sym1, STATES),
     export_submachines(Ms, Sym2);
 export_submachines([],Sym) ->
@@ -110,24 +110,25 @@ lint_submachines([],SUBMACHINES,Es) ->
 
 
 lint_states([{identifier,Ln,ID}|Xs],Acc,Sym,Es) ->
+    S = #state { id=ID, line=Ln },
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
-	    lint_states(Xs,[{ID,Ln}|Acc],Sym,[E|Es]);
+	    lint_states(Xs,[S|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{state,Ln},Sym),
-	    lint_states(Xs,[{ID,Ln}|Acc],Sym1,Es)
+	    Sym1 = maps:put(ID,S,Sym),
+	    lint_states(Xs,[S|Acc],Sym1,Es)
     end;
 lint_states([],Acc,Sym,Es) ->
     {lists:reverse(Acc),Sym,Es}.
 
 %% lint_misc0, collect declaration and check uniqness
-lint_misc_0([{in,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN++Xs,DEF,OUT,CLOCK,Sym,Es);
-lint_misc_0([{def,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN,DEF++Xs,OUT,CLOCK,Sym,Es);
-lint_misc_0([{out,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN,DEF,OUT++Xs,CLOCK,Sym,Es);
+lint_misc_0([{in,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN++[{Type,X}||X<-Xs],DEF,OUT,CLOCK,Sym,Es);
+lint_misc_0([{def,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,DEF++[{Type,X}||X<-Xs],OUT,CLOCK,Sym,Es);
+lint_misc_0([{out,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,DEF,OUT++[{Type,X}||X<-Xs],CLOCK,Sym,Es);
 lint_misc_0([{clocks,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
     lint_misc_0(Ms,IN,DEF,OUT,CLOCK++Xs,Sym,Es);
 lint_misc_0([],IN,DEF,OUT,CLOCK,Sym,Es) ->
@@ -138,38 +139,40 @@ lint_misc_0([],IN,DEF,OUT,CLOCK,Sym,Es) ->
     {IN1,DEF1,OUT1,CLOCK1,Sym4,Es4}.
 
 
-lint_in_0([{identifier,Ln,ID}|Xs],Acc,Sym,Es) ->
+lint_in_0([{Type,{identifier,Ln,ID}}|Xs],Acc,Sym,Es) ->
+    V = #var{id=ID,line=Ln,type=Type,class=in},
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
-	    lint_in_0(Xs,[{ID,Ln,undefined}|Acc],Sym,[E|Es]);
+	    lint_in_0(Xs,[V|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{in,Ln},Sym),
-	    lint_in_0(Xs,[{ID,Ln,undefined}|Acc],Sym1,Es)
+	    Sym1 = maps:put(ID,V,Sym),
+	    lint_in_0(Xs,[V|Acc],Sym1,Es)
     end;
-lint_in_0([{'=',_Ln,{identifier,Ln,ID},Pred}|Xs],Acc,Sym,Es) ->
+lint_in_0([{Type,{'=',_Ln,{identifier,Ln,ID},Expr}}|Xs],Acc,Sym,Es) ->
+    V = #var{id=ID,line=Ln,type=Type,class=in,expr=Expr},
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
-	    lint_in_0(Xs,[{ID,Ln,Pred}|Acc],Sym,[E|Es]);
+	    lint_in_0(Xs,[V|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{in,Ln},Sym),
-	    lint_in_0(Xs,[{ID,Ln,Pred}|Acc],Sym1,Es)
+	    Sym1 = maps:put(ID,V,Sym),
+	    lint_in_0(Xs,[V|Acc],Sym1,Es)
     end;
 lint_in_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
-
 %% a list of {ID,Ln,Sat} where Sat is parse tree
 
-lint_def_0([{'=',_Ln,{identifier,Ln,ID},Sat}|Xs],Acc,Sym,Es) ->
+lint_def_0([{Type,{'=',_Ln,{identifier,Ln,ID},Expr}}|Xs],Acc,Sym,Es) ->
+    V = #var{id=ID,line=Ln,type=Type,class=def,expr=Expr},
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
-	    lint_def_0(Xs,[{ID,Ln,Sat}|Acc],Sym,[E|Es]);
+	    lint_def_0(Xs,[V|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{def,Ln},Sym),
-	    lint_def_0(Xs,[{ID,Ln,Sat}|Acc],Sym1,Es)
+	    Sym1 = maps:put(ID,V,Sym),
+	    lint_def_0(Xs,[V|Acc],Sym1,Es)
     end;
 lint_def_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
@@ -180,36 +183,37 @@ lint_clock_0([{clock,Ln,{identifier,_Ln,ID},{identifier,_Ln,NAME},
     H = get_number(High),
     S = get_number(Step),
     D = get_number(Default),
-    Clock = {ID,Ln,{NAME,{L,H,S},D}},
+    Clock = #clock{id=ID,name=NAME,line=Ln,range={L,H,S},default=D},
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
 	    lint_clock_0(Xs,[Clock|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{clock,Ln},Sym),
+	    Sym1 = maps:put(ID,Clock,Sym),
     	    lint_clock_0(Xs,[Clock|Acc],Sym1,Es)
     end;
 lint_clock_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
-lint_out_0([{'=',_Ln,{identifier,Ln,ID},Sat}|Xs],Acc,Sym,Es) ->
+lint_out_0([{Type,{'=',_Ln,{identifier,Ln,ID},Expr}}|Xs],Acc,Sym,Es) ->
+    V = #var{id=ID,line=Ln,type=Type,class=out,expr=Expr},
     case maps:find(ID,Sym) of
 	{ok,_} ->
 	    E = {Ln,?MODULE,[ID, " is already defined"]},
-	    lint_out_0(Xs,[{ID,Ln,Sat}|Acc],Sym,[E|Es]);
+	    lint_out_0(Xs,[V|Acc],Sym,[E|Es]);
 	error ->
-	    Sym1 = maps:put(ID,{out,Ln},Sym),
-	    lint_out_0(Xs,[{ID,Ln,Sat}|Acc],Sym1,Es)
+	    Sym1 = maps:put(ID,V,Sym),
+	    lint_out_0(Xs,[V|Acc],Sym1,Es)
     end;
 lint_out_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
 %% Check input
-lint_in([{ID,Ln,undefined}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
-    lint_in(Xs,[{ID,Ln,undefined}|Acc],Sym,Mid,SUBMACHINES,Es0);
-lint_in([{ID,Ln,Pred}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
-    {Pred1,Es1} = 
-	lint_pred(Pred,
+lint_in([V=#var{expr=undefined}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
+    lint_in(Xs,[V|Acc],Sym,Mid,SUBMACHINES,Es0);
+lint_in([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
+    {Expr1,Es1} = 
+	lint_pred(Expr,
 		  fun(I={identifier,_Ln,_ID},Es) ->
 			  %% global in variable
 			  lint_in_variable(I,Sym,Es);
@@ -219,30 +223,29 @@ lint_in([{ID,Ln,Pred}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
 		     ({timeout,Ln1,{identifier,_Ln,TID}},Es) ->
 			  E = {Ln1,?MODULE,["timeout(",TID,")"
 					    " can not be used in this section"]},
-			  {{timeout,ID},[E|Es]}
+			  {{timeout,TID},[E|Es]}
 		  end,Es0),
-    lint_in(Xs,[{ID,Ln,Pred1}|Acc],Sym,Mid,SUBMACHINES,Es1);
+    lint_in(Xs,[V#var{expr=Expr1}|Acc],Sym,Mid,SUBMACHINES,Es1);
 lint_in([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 %% Check def
-lint_def([{ID,Ln,Sat}|Xs],Acc,Sym,Es) ->
-    {Sat1,Es1} = lint_dsat(Sat,Sym,Es),
-    lint_def(Xs,[{ID,Ln,Sat1}|Acc],Sym,Es1);
+lint_def([V=#var{expr=Expr}|Xs],Acc,Sym,Es) ->
+    {Expr1,Es1} = lint_dsat(Expr,Sym,Es),
+    lint_def(Xs,[V#var{expr=Expr1}|Acc],Sym,Es1);
 lint_def([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
-lint_clock([Clock={_ID,_Ln,{_Name,{_L,_H,_S},_D}}|Xs],Acc,Sym,Es) ->
+lint_clock([Clock=#clock{}|Xs],Acc,Sym,Es) ->
     lint_clock(Xs,[Clock|Acc],Sym,Es);
 lint_clock([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
-lint_out([{ID,Ln,Sat}|Xs],Acc,Sym,Sub,Es) ->
-    {Sat1,Es1} = lint_osat(Sat,Sym,Sub,Es),
-    lint_out(Xs,[{ID,Ln,Sat1}|Acc],Sym,Sub,Es1);
+lint_out([V=#var{expr=Expr}|Xs],Acc,Sym,Sub,Es) ->
+    {Expr1,Es1} = lint_osat(Expr,Sym,Sub,Es),
+    lint_out(Xs,[V#var{expr=Expr1}|Acc],Sym,Sub,Es1);
 lint_out([],Acc,_Sym,_Sub,Es) ->
     {Acc,Es}.
-
 
 lint_dsat(Form,Sym,Es0) ->
     lint_sat(Form,
@@ -276,7 +279,7 @@ lint_osat(Form,Sym,_Sub,Es0) ->
 
 lint_trans([{{identifier,Ln,ID},TR}|Xs],Acc,Sym,Es) ->
     case maps:find(ID,Sym) of
-	{ok,{state,_Ln}} ->
+	{ok,#state{}} ->
 	    {TR1,Es1} = lint_trans_list(TR,[],Sym,Es),
 	    lint_trans(Xs,[{ID,Ln,TR1}|Acc],Sym,Es1);
 	_ ->
@@ -289,8 +292,8 @@ lint_trans([],Acc,_Sym,Es) ->
 
 lint_trans_list([{{identifier,Ln,ID},Sat,{start,START}}|TR],Acc,Sym,Es) ->
     Es1 = case maps:find(ID,Sym) of
-	      {ok,{state,_}} -> Es;
-	      {ok,{_,_}} ->
+	      {ok,#state{}} -> Es;
+	      {ok,_} ->
 		  [{Ln,?MODULE,[ID, " is not a state"]}|Es];
 	      error -> 
 		  [{Ln,?MODULE,["state ", ID, " not declared"]}|Es]
@@ -303,7 +306,7 @@ lint_trans_list([],Acc,_Sym,Es) ->
 
 lint_start([{identifier,Ln,ID}|START],Acc,Sym,Es) ->
     case maps:find(ID,Sym) of
-	{ok,{clock,_}} ->
+	{ok,#clock{}} ->
 	    lint_start(START,[{ID,Ln}|Acc],Sym,Es);
 	_ ->
 	    E = {Ln,?MODULE,["start ", ID, " is not a clock"]},
@@ -336,11 +339,11 @@ lint_in_variable({field,Ln,{identifier,_,OBJ},{identifier,_,ID}},Sym,Es) ->
 
 lint_in_variable_(ID,Ln,Sym,Es) ->
     case maps:find(ID,Sym) of
-	{ok,{in,_}} ->
-	    {{in,ID},Es};
+	{ok,#var{class=in,type=Type}} ->
+	    {{in,ID,Type},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID, " must be an in parameter"]},
-	    {{in,ID},[E|Es]}
+	    {{in,ID,boolean},[E|Es]}
     end.
 
 
@@ -352,24 +355,24 @@ lint_out_or_state_variable({field,Ln,{identifier,_,OBJ},{identifier,_,ID}},
 
 lint_out_or_state_variable_(ID,Ln,Sym,Mid,SUBMACHINES,Es) ->
     case maps:find(ID,Sym) of
-	{ok,{out,_}} ->
+	{ok,#var{class=out,type=Type}} ->
 	    case ID of
-		[M,".",_FLD] ->
+		[M,".",_FLD] when SUBMACHINES =/= [] ->
 		    case index(M, SUBMACHINES) < index(Mid,SUBMACHINES) of
 			true ->
 			    %% out1 refere to the current instance of the output
-			    {{out1,ID},Es};
+			    {{out1,ID,Type},Es};
 			false ->
-			    {{out,ID},Es}
+			    {{out,ID,Type},Es}
 		    end;
 		_ ->
-		    {{out,ID},Es}
+		    {{out,ID,Type},Es}
 	    end;
-	{ok,{state,_}} ->
+	{ok,#state{}} ->
 	    {{state,ID},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID, " must be a state or an out parameter"]},
-	    {{out,ID},[E|Es]}
+	    {{out,ID,boolean},[E|Es]}
     end.
 
 lint_in_def_state_variable({identifier,Ln,ID},Sym,Es) ->
@@ -380,28 +383,28 @@ lint_in_def_state_variable({field,Ln,{identifier,_,OBJ},{identifier,_,ID}},
 
 lint_in_def_state_variable_(ID,Ln,Sym,Es) ->
     case maps:find(ID, Sym) of
-	{ok,{in,_}} -> {{in,ID},Es};
-	{ok,{def,_}} -> {{def,ID},Es};
-	{ok,{state,_}} -> {{state,ID},Es};
+	{ok,#var{class=in,type=Type}} -> {{in,ID,Type},Es};
+	{ok,#var{class=def,type=Type}} -> {{def,ID,Type},Es};
+	{ok,#state{}} -> {{state,ID},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID,
 			     " must be a state,in or def parameter"]},
-	    {{in,ID},[E|Es]}
+	    {{in,ID,boolean},[E|Es]}
     end.
 
 lint_in_def_variable_(ID,Ln,Sym,Es) ->
     case maps:find(ID, Sym) of
-	{ok,{in,_}} -> {{in,ID},Es};
-	{ok,{def,_}} -> {{def,ID},Es};
+	{ok,#var{class=in,type=Type}} -> {{in,ID,Type},Es};
+	{ok,#var{class=def,type=Type}} -> {{def,ID,Type},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID, 
 			     " must be in or def parameter"]},
-	    {{in,ID},[E|Es]}
+	    {{in,ID,boolean},[E|Es]}
     end.
 
 lint_timeout_(ID,Ln,Sym,Es) ->
     case maps:find(ID, Sym) of
-	{ok,{clock,_}} -> {{timeout,ID},Es};
+	{ok,#clock{}} -> {{timeout,ID},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID, " must be a clock"]},
 	    {{timeout,ID},[E|Es]}
@@ -415,17 +418,33 @@ lint_sat(I={field,_Ln,_OBJ,_ID},Lookup,Es) ->
     Lookup(I,Es);
 lint_sat(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,Es) ->
     Lookup(I,Es);
-lint_sat({'0',_Ln},_Lookup,Es) -> {0,Es};
-lint_sat({'1',_Ln},_Lookup,Es) -> {1,Es};
+lint_sat({decnum,_Ln,"0"},_Lookup,Es) -> {{const,0},Es};
+lint_sat({decnum,_Ln,"1"},_Lookup,Es) -> {{const,1},Es};
 lint_sat({Op,_Ln,R,L},Lookup,Es) when 
       Op =:= '&&'; Op =:= '||'; Op =:= '->'; Op =:= '<->' ->
     {L1,Es1} = lint_sat(L,Lookup,Es),
     {R1,Es2} = lint_sat(R,Lookup,Es1),
     {{Op,L1,R1},Es2};
+lint_sat({Op,_Ln,R,L},Lookup,Es) when 
+      Op =:= '<'; Op =:= '<='; Op =:= '>'; Op =:= '>='; 
+      Op =:= '=='; Op =:= '!=' ->
+    {L1,Es1} = lint_arith(L,Lookup,Es),
+    {R1,Es2} = lint_arith(R,Lookup,Es1),
+    {{Op,L1,R1},Es2};
 lint_sat({Op,_Ln,M},Lookup,Es) when 
       Op =:= '!' ->
     {M1,Es1} = lint_sat(M,Lookup,Es),
-    {{Op,M1},Es1}.
+    {{Op,M1},Es1};
+lint_sat({pred,Ln,{identifier,_,P},Args},_Lookup,Es) ->
+    {{pred,P,Args},
+     [{Ln,?MODULE,["predicate not allowed in sat formula"]}|Es]}; 
+lint_sat({'ALL',Ln,{identifier,_,X},F},_Lookup,Es) ->
+    {{'ALL',{var,X},F},
+     [{Ln,?MODULE,["quantifier not allowed in sat formula"]}|Es]};
+lint_sat({'SOME',Ln,{identifier,_,X},F},_Lookup,Es) ->
+    {{'SOME',{var,X},F},
+     [{Ln,?MODULE,["quantifier not allowed in sat formula"]}|Es]}.
+
 
 %% lint PRED formula, for identifiers, timeout a callback is used
 lint_pred(F, Lookup, Es) ->
@@ -437,8 +456,8 @@ lint_pred(I={field,_Ln,_OBJ,_ID},Lookup,_Vs,Es) ->
     Lookup(I,Es);
 lint_pred(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,_Vs,Es) ->
     Lookup(I,Es);
-lint_pred({'0',_Ln},_Lookup,_Vs,Es) -> {0,Es};
-lint_pred({'1',_Ln},_Lookup,_Vs,Es) -> {1,Es};
+lint_pred({decnum,_Ln,"0"},_Lookup,_Vs,Es) -> {{const,0},Es};
+lint_pred({decnum,_Ln,"1"},_Lookup,_Vs,Es) -> {{const,1},Es};
 lint_pred({pred,_Ln,{identifier,_,P},Args},Lookup,Vs,Es) ->
     {As,Es1} = lint_pred_args(Args,[],Lookup,Vs,Es),
     {{pred,P,As},Es1};
@@ -452,6 +471,12 @@ lint_pred({Op,_Ln,R,L},Lookup,Vs,Es) when
       Op =:= '&&'; Op =:= '||'; Op =:= '->'; Op =:= '<->' ->
     {L1,Es1} = lint_pred(L,Lookup,Vs,Es),
     {R1,Es2} = lint_pred(R,Lookup,Vs,Es1),
+    {{Op,L1,R1},Es2};
+lint_pred({Op,_Ln,R,L},Lookup,_Vs,Es) when 
+      Op =:= '<'; Op =:= '<='; Op =:= '>'; Op =:= '>='; 
+      Op =:= '=='; Op =:= '!=' ->
+    {L1,Es1} = lint_arith(L,Lookup,Es),
+    {R1,Es2} = lint_arith(R,Lookup,Es1),
     {{Op,L1,R1},Es2};
 lint_pred({Op,_Ln,M},Lookup,Vs,Es) when 
       Op =:= '!' ->
@@ -470,10 +495,8 @@ lint_pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
 		   {decnum,_Ln,Ds} -> {{const,list_to_integer(Ds,10)},Es};
 		   {hexnum,_Ln,Ds} -> {{const,list_to_integer(Ds,16)},Es};
 		   {octnum,_Ln,Ds} -> {{const,list_to_integer(Ds,8)},Es};
-		   {binnum,_Ln,Ds} -> {{const,list_to_integer(Ds,2)},Es};	
-		   {flonum,_Ln,Ds} -> {{const,list_to_float(Ds)},Es};
-		   {'1',_Ln} -> {{const,1},Es};
-		   {'0',_Ln} -> {{const,0},Es}
+		   {binnum,_Ln,Ds} -> {{const,list_to_integer(Ds,2)},Es};
+		   {flonum,_Ln,Ds} -> {{const,list_to_float(Ds)},Es}
 	       end,
     lint_pred_args(Fs,[F1|Acc],Lookup,Vs,Es1);
 lint_pred_args([],Acc,_Lookup,_Vs,Es) ->
@@ -483,9 +506,24 @@ get_number({decnum,_Ln,Ds}) -> list_to_integer(Ds,10);
 get_number({hexnum,_Ln,[$0,$x|Ds]}) -> list_to_integer(Ds,16);
 get_number({octnum,_Ln,[$0|Ds]}) -> list_to_integer(Ds,8);
 get_number({binnum,_Ln,[$0,$b|Ds]}) -> list_to_integer(Ds,2);
-get_number({flonum,_Ln,Ds}) -> list_to_float(Ds);
-get_number({'1',_Ln}) -> 1;
-get_number({'0',_Ln}) -> 0.
+get_number({flonum,_Ln,Ds}) -> list_to_float(Ds).
+
+lint_arith(ID={identifier,_Ln,_X}, Lookup, Es) ->
+    Lookup(ID,Es);
+lint_arith({decnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,10)},Es};
+lint_arith({hexnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,16)},Es};
+lint_arith({octnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,8)},Es};
+lint_arith({binnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,2)},Es};	
+lint_arith({flonum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_float(Ds)},Es};
+lint_arith({Op,_Ln,R,L},Lookup,Es) when 
+      Op =:= '+'; Op =:= '-'; Op =:= '*'; Op =:= '/'; Op =:= '%' ->
+    {L1,Es1} = lint_arith(L,Lookup,Es),
+    {R1,Es2} = lint_arith(R,Lookup,Es1),
+    {{Op,L1,R1},Es2};
+lint_arith({Op,_Ln,M},Lookup,Es) when 
+      Op =:= '-' ->
+    {M1,Es1} = lint_arith(M,Lookup,Es),
+    {{Op,M1},Es1}.
 
 index(Key,Keys) ->
     index_(Key,Keys,1).

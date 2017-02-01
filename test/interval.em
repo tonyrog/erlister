@@ -1,4 +1,4 @@
-//
+// -*- c -*-
 // INTERVAL function button (toggle)
 //
 
