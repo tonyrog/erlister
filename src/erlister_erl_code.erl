@@ -43,7 +43,9 @@ declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
     [
      "-module('",ID,"').",?N,
      "-export([main/0,wait/3,loop/3,final/0]).",?N,
-     "-define(BOOL2INT(X), if (X) -> 1; true -> 0 end).",?N,
+     "-define(AND(X,Y), (((X) =/= 0) andalso ((Y) =/= 0)))",?N,
+     "-define(OR(X,Y), (((X) =/= 0) orelse ((Y) =/= 0)))",?N,
+     "-define(NOT(X), ((X) =:= 0)",?N,
      ?N
     ].
 
@@ -148,11 +150,11 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 	     [?T,?T],",",?N),?N,
      ?T,"}) ->", ?N,
      %% load input from formula
-     [ [?T,["IN_",ID,"_",Name]," = ",formula(ID,in,Name,Expr),",",?N] || 
-	 #var{id=Name,expr=Expr} <- IN],
+     [ [?T,["IN_",ID,"_",Name]," = ",formula(ID,in,Type,Name,Expr),",",?N] || 
+	 #var{id=Name,type=Type,expr=Expr} <- IN],
 
-     [ [?T,["DEF_",ID,"_",Name]," = ",formula(ID,def,Expr),",",?N] ||
-	 #var{id=Name,expr=Expr} <- DEF, Expr =/= undefined ],
+     [ [?T,["DEF_",ID,"_",Name]," = ",formula(ID,def,Type,Expr),",",?N] ||
+	 #var{id=Name,type=Type,expr=Expr} <- DEF, Expr =/= undefined ],
 
      [ [?T,["CLK_",ID,"_",T]," = ",
 	"erlister_rt:timer_read(", "clk_",ID,"_",T,"),",?N]
@@ -160,23 +162,27 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 
      [ begin
 	   Mid = M#machine.name,
-	   [ [[?T,["IN_",Mid,"_",Name]," = ",formula(ID,in,Expr),",",?N] ||
-		 #var{id=Name,expr=Expr} <- M#machine.in,Expr =/= undefined],
-	     [[?T,["DEF_",Mid,"_",Name]," = ",formula(ID,def,Expr),",",?N] ||
-		 #var{id=Name,expr=Expr} <- M#machine.def,Expr =/= undefined],
+	   [ [[?T,["IN_",Mid,"_",Name]," = ",formula(ID,in,Type,Expr),",",?N] ||
+		 #var{id=Name,type=Type,expr=Expr} <- 
+		     M#machine.in,Expr =/= undefined],
+	     [[?T,["DEF_",Mid,"_",Name]," = ",
+	       formula(ID,def,Type,Expr),",",?N] ||
+		 #var{id=Name,type=Type,expr=Expr} <-
+		     M#machine.def,Expr =/= undefined],
 	     [[?T,["CLK_",Mid,"_",T]," = ",
 	       "erlister_rt:read_timer(", "clk_",ID,"_",T,"),",?N] ||
 		 #clock{id=T} <- M#machine.clocks],
 	     code_trans(Mid, M#machine.trans),
 	     [ [?T,"OUT1_",[Mid,"_",Name]," = ", 
-		formula(Mid,out,Expr),",",?N] || 
-		 #var{id=Name,expr=Expr} <- M#machine.out,Expr =/= undefined]
+		formula(Mid,out,Type,Expr),",",?N] || 
+		 #var{id=Name,type=Type,expr=Expr} <- 
+		     M#machine.out,Expr =/= undefined]
 	   ]
        end || M <- MACHINES],
      
      code_trans(ID, TRANS),
-     [ [?T,"OUT1_",[ID,"_",Name]," = ", formula(ID,out,Expr),",",?N] || 
-	 #var{id=Name,expr=Expr} <- OUT,Expr =/= undefined],
+     [ [?T,"OUT1_",[ID,"_",Name]," = ", formula(ID,out,Type,Expr),",",?N] || 
+	 #var{id=Name,type=Type,expr=Expr} <- OUT,Expr =/= undefined],
 
      ?T, "wait(STATE#{",?N,
      arglist([ [?T,?T,?Q,M#machine.name,"_state",?Q," => ",
@@ -208,7 +214,7 @@ code_trans(ID,TRs) ->
      [[ [?T,?T,[?Q,From,?Q]," ->",?N,
 	 [?T,?T,?T,"if",?N],
 	 [ begin
-	       [?T,?T,?T,?T,formula_(ID,trans,Cond), " ->",?N,
+	       [?T,?T,?T,?T,formula_(ID,trans,boolean,Cond), " ->",?N,
 		tlist(ID,Start,[?T,?T,?T,?T,?T],[",",?N]),
 		?T,?T,?T,?T,?T,[?Q,To,?Q],?E
 	       ]
@@ -264,65 +270,64 @@ arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];
 arglist([A|As],Pre,Sep,Del) -> [Pre,A,Sep,Del | arglist(As,Pre,Sep,Del)].
 
-formula(SELF,in,Name,undefined) -> ["I_",fid(SELF,Name)];
-formula(SELF,Class,_Name,F) -> ["?BOOL2INT(",formula_(SELF,Class,F),")"].
+formula(SELF,in,_Type,Name,undefined) ->
+    ["I_",fid(SELF,Name)];
+formula(SELF,Class,Type,_Name,F) -> 
+    formula_(SELF,Class,Type,F).
 
-formula(SELF,Class,F) ->
-    ["?BOOL2INT(",formula_(SELF,Class,F),")"].
+formula(SELF,Class,Type,F) ->
+    formula_(SELF,Class,Type,F).
 
-formula_(_SELF,_Class,{const,1})    -> "true";  %% fixme!
-formula_(_SELF,_Class,{const,0})    -> "false";  %% fixme!
-formula_(_SELF,_Class,{const,C})    -> integer_to_list(C);
-formula_(SELF,in,{in,ID,boolean})    ->  ["(I_",fid(SELF,ID)," =/= 0)"];
-formula_(SELF,in,{in,ID,_Type})       -> ["I_",fid(SELF,ID)];
-formula_(SELF,_Class,{in,ID,boolean})  -> ["(IN_",fid(SELF,ID)," =/= 0)"];
-formula_(SELF,_Class,{in,ID,_Type})    -> ["IN_",fid(SELF,ID)];
-formula_(SELF,_Class,{out1,ID,boolean}) -> ["(OUT1_",fid(SELF,ID)," =/= 0)"];
-formula_(SELF,_Class,{out1,ID,_Type}) -> ["OUT1_",fid(SELF,ID)];
-formula_(SELF,_Class,{out,ID,boolean}) -> ["(OUT_",fid(SELF,ID)," =/= 0)"];
-formula_(SELF,_Class,{out,ID,_Type}) -> ["OUT_",fid(SELF,ID)];
-formula_(SELF,_Class,{def,ID,boolean}) -> ["(DEF_",fid(SELF,ID)," =/= 0)"];
-formula_(SELF,_Class,{def,ID,_Type}) -> ["DEF_",fid(SELF,ID)];
-formula_(SELF,out,{state,ID}) ->  ["(ST1_",mid(SELF,ID)," =:= ",
-				  ?Q,fld(ID),?Q,")"];
-formula_(SELF,_Class,{state,ID}) ->  ["(ST_",mid(SELF,ID)," =:= ",
+formula_(_SELF,_Class,_Type,{const,true})  -> "true";
+formula_(_SELF,_Class,_Type,{const,false}) -> "false";
+formula_(_SELF,_Class,_Type,{const,C})    -> integer_to_list(C);
+formula_(SELF,in,_Type,{in,ID,_T})       -> ["I_",fid(SELF,ID)];
+formula_(SELF,_Class,_Type,{in,ID,_T})    -> ["IN_",fid(SELF,ID)];
+formula_(SELF,_Class,_Type,{out1,ID,_T}) -> ["OUT1_",fid(SELF,ID)];
+formula_(SELF,_Class,_Type,{out,ID,_T}) -> ["OUT_",fid(SELF,ID)];
+formula_(SELF,_Class,_Type,{def,ID,_T}) -> ["DEF_",fid(SELF,ID)];
+formula_(SELF,out,_Type,{state,ID}) ->  ["(ST1_",mid(SELF,ID)," =:= ",
+					 ?Q,fld(ID),?Q,")"];
+formula_(SELF,_Class,_Type,{state,ID}) ->  ["(ST_",mid(SELF,ID)," =:= ",
 				    ?Q,fld(ID),?Q,")"];
-formula_(SELF,_Class,{timeout,ID}) ->
+formula_(SELF,_Class,_Type,{timeout,ID}) ->
     ["(","CLK_",fid(SELF,ID)," =:= timeout)"];
-formula_(SELF,Class,{'&&',L,R}) ->
-    ["(",formula_(SELF,Class,L),") andalso (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'||',L,R}) ->
-    ["(",formula_(SELF,Class,L),") orelse (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'->',L,R}) ->
-    ["not (",formula_(SELF,Class,L),") orelse (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'<->',L,R}) ->
-    ["(",formula_(SELF,Class,L),") =:= (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'<',L,R}) ->
-    ["(",formula_(SELF,Class,L),") < (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'<=',L,R}) ->
-    ["(",formula_(SELF,Class,L),") =< (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'>',L,R}) ->
-    ["(",formula_(SELF,Class,L),") > (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'>=',L,R}) ->
-    ["(",formula_(SELF,Class,L),") >= (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'==',L,R}) ->
-    ["(",formula_(SELF,Class,L),") =:= (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'!=',L,R}) ->
-    ["(",formula_(SELF,Class,L),") =/= (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'+',L,R}) ->
-    ["(",formula_(SELF,Class,L),") + (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'-',L,R}) -> 
-    ["(",formula_(SELF,Class,L),") - (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'*',L,R}) -> 
-    ["(",formula_(SELF,Class,L),") * (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'/',L,R}) -> 
-    ["(",formula_(SELF,Class,L),") div (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'%',L,R}) -> 
-    ["(",formula_(SELF,Class,L),") rem (",formula_(SELF,Class,R),")"];
-formula_(SELF,Class,{'-',F}) -> 
-    ["-(",formula_(SELF,Class,F),")"];
-formula_(SELF,Class,{'!',F}) -> 
-    ["not (",formula_(SELF,Class,F),")"].
+formula_(SELF,Class,Type,{'&&',L,R}) ->
+    ["?AND(", formula_(SELF,Class,Type,L),",",
+     formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'||',L,R}) ->
+    ["?OR(", formula_(SELF,Class,Type,L),",",
+     formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'->',L,R}) ->
+    formula_(SELF,Class,Type,{'||',{'!',L},R});
+formula_(SELF,Class,Type,{'<->',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") =:= (",formula_(SELF,Class,Type,R),")"];formula_(SELF,Class,Type,{'<',L,R}) ->
+    %% fix boolean case?
+    ["(",formula_(SELF,Class,Type,L),") < (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'<=',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") =< (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'>',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") > (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'>=',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") >= (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'==',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") =:= (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'!=',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") =/= (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'+',L,R}) ->
+    ["(",formula_(SELF,Class,Type,L),") + (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'-',L,R}) -> 
+    ["(",formula_(SELF,Class,Type,L),") - (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'*',L,R}) -> 
+    ["(",formula_(SELF,Class,Type,L),") * (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'/',L,R}) -> 
+    ["(",formula_(SELF,Class,Type,L),") div (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'%',L,R}) -> 
+    ["(",formula_(SELF,Class,Type,L),") rem (",formula_(SELF,Class,Type,R),")"];
+formula_(SELF,Class,Type,{'-',F}) -> 
+    ["-(",formula_(SELF,Class,Type,F),")"];
+formula_(SELF,Class,Type,{'!',F}) -> 
+    ["?NOT(",formula_(SELF,Class,Type,F),")"].
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.

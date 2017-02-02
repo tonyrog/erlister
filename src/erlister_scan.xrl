@@ -31,7 +31,8 @@ unsigned32      : {token,{unsigned32,TokenLine}}.
 integer8        : {token,{integer8,TokenLine}}.
 integer16       : {token,{integer16,TokenLine}}.
 integer32       : {token,{integer32,TokenLine}}.
-
+true            : {token,{true,TokenLine}}.
+false           : {token,{false,TokenLine}}.
 \&\&		: {token,{'&&',TokenLine}}.
 \|\|		: {token,{'||',TokenLine}}.
 \!		: {token,{'!',TokenLine}}.

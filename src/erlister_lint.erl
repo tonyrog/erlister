@@ -10,9 +10,8 @@
 -export([machine/1]).
 -export([format_error/1]).
 
-
 -include("../include/erlister.hrl").
-	 
+
 
 machine([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     Sym = maps:new(),
@@ -213,25 +212,25 @@ lint_in([V=#var{expr=undefined}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
     lint_in(Xs,[V|Acc],Sym,Mid,SUBMACHINES,Es0);
 lint_in([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
     {Expr1,Es1} = 
-	lint_pred(Expr,
-		  fun(I={identifier,_Ln,_ID},Es) ->
-			  %% global in variable
-			  lint_in_variable(I,Sym,Es);
-		     (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es)->
-			  %% submachine out or state
-			  lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
-		     ({timeout,Ln1,{identifier,_Ln,TID}},Es) ->
-			  E = {Ln1,?MODULE,["timeout(",TID,")"
-					    " can not be used in this section"]},
-			  {{timeout,TID},[E|Es]}
-		  end,Es0),
+	expr(Expr,in,V#var.type,
+	     fun(I={identifier,_Ln,_ID},Es) ->
+		     %% global in variable
+		     lint_in_variable(I,Sym,Es);
+		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es)->
+		     %% submachine out or state
+		     lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
+		({timeout,Ln1,{identifier,_Ln,TID}},Es) ->
+		     E = {Ln1,?MODULE,["timeout(",TID,")"
+				       " can not be used in this section"]},
+		     {{timeout,TID},[E|Es]}
+	     end,[],Es0),
     lint_in(Xs,[V#var{expr=Expr1}|Acc],Sym,Mid,SUBMACHINES,Es1);
 lint_in([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 %% Check def
 lint_def([V=#var{expr=Expr}|Xs],Acc,Sym,Es) ->
-    {Expr1,Es1} = lint_dsat(Expr,Sym,Es),
+    {Expr1,Es1} = lint_dsat(Expr,V#var.type,Sym,Es),
     lint_def(Xs,[V#var{expr=Expr1}|Acc],Sym,Es1);
 lint_def([],Acc,_Sym,Es) ->
     {Acc,Es}.
@@ -242,22 +241,22 @@ lint_clock([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
 lint_out([V=#var{expr=Expr}|Xs],Acc,Sym,Sub,Es) ->
-    {Expr1,Es1} = lint_osat(Expr,Sym,Sub,Es),
+    {Expr1,Es1} = lint_osat(Expr,V#var.type,Sym,Sub,Es),
     lint_out(Xs,[V#var{expr=Expr1}|Acc],Sym,Sub,Es1);
 lint_out([],Acc,_Sym,_Sub,Es) ->
     {Acc,Es}.
 
-lint_dsat(Form,Sym,Es0) ->
-    lint_sat(Form,
-	     fun(I={identifier,_Ln,_ID},Es) ->
-		     lint_in_variable(I,Sym,Es);
-		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
-		     lint_in_variable(I,Sym,Es);
-		({timeout,Ln,{identifier,_Ln,ID}},Es) ->
-		     E = {Ln,?MODULE,["timeout(",ID,")"
-				      " can not be used in def section"]},
-		     {{timeout,ID},[E|Es]}
-	     end,Es0).
+lint_dsat(Form,Type,Sym,Es0) ->
+    expr(Form,def,Type,
+	 fun(I={identifier,_Ln,_ID},Es) ->
+		 lint_in_variable(I,Sym,Es);
+	    (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
+		 lint_in_variable(I,Sym,Es);
+	    ({timeout,Ln,{identifier,_Ln,ID}},Es) ->
+		 E = {Ln,?MODULE,["timeout(",ID,")"
+				  " can not be used in def section"]},
+		 {{timeout,ID},[E|Es]}
+	 end,[],Es0).
 
 %% Lint  output SAT formual
 %% For submachines out variables are
@@ -265,17 +264,17 @@ lint_dsat(Form,Sym,Es0) ->
 %% For machine variables are
 %%   global IN, global DEF, STATE and submachine OUT, submachine STATE
 %%
-lint_osat(Form,Sym,_Sub,Es0) ->
-    lint_sat(Form,
-	     fun(I={identifier,_Ln,_ID},Es) ->
-		     %% global IN, DEF or STATE
-		     lint_in_def_state_variable(I,Sym,Es);
-		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
-		     %% sibling STATE,OUT?
-		     lint_out_or_state_variable(I,Sym,"",[],Es);
-		({timeout,_Ln,{identifier,Ln,ID}},Es) ->
-		     lint_timeout_(ID,Ln,Sym,Es)
-	     end, Es0).
+lint_osat(Form,Type,Sym,_Sub,Es0) ->
+    expr(Form,out,Type,
+	 fun(I={identifier,_Ln,_ID},Es) ->
+		 %% global IN, DEF or STATE
+		 lint_in_def_state_variable(I,Sym,Es);
+	    (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
+		 %% sibling STATE,OUT?
+		 lint_out_or_state_variable(I,Sym,"",[],Es);
+	    ({timeout,_Ln,{identifier,Ln,ID}},Es) ->
+		 lint_timeout_(ID,Ln,Sym,Es)
+	 end, [], Es0).
 
 lint_trans([{{identifier,Ln,ID},TR}|Xs],Acc,Sym,Es) ->
     case maps:find(ID,Sym) of
@@ -321,16 +320,16 @@ lint_start([],Acc,_Sym,Es) ->
 %%  also timeout expressions are allowed.
 
 lint_tsat(Form,Sym,Es0) ->
-    lint_sat(Form,
-	     fun({identifier,Ln,ID},Es) ->
-		     lint_in_def_variable_(ID,Ln,Sym,Es);
-		({timeout,_Ln,{identifier,Ln,ID}},Es) ->
-		     lint_timeout_(ID,Ln,Sym,Es);
-		({field,Ln,{identifier,_Ln1,OBJ},{identifier,_Ln2,ID}},Es) ->
-		     E = {Ln,?MODULE,["variable ",OBJ,".",ID,
-				      " can not be used in trans section"]},
-		     {{in,[OBJ,".",ID]},[E|Es]}
-	     end,Es0).
+    expr(Form,trans,boolean,
+	 fun({identifier,Ln,ID},Es) ->
+		 lint_in_def_variable_(ID,Ln,Sym,Es);
+	    ({timeout,_Ln,{identifier,Ln,ID}},Es) ->
+		 lint_timeout_(ID,Ln,Sym,Es);
+	    ({field,Ln,{identifier,_Ln1,OBJ},{identifier,_Ln2,ID}},Es) ->
+		 E = {Ln,?MODULE,["variable ",OBJ,".",ID,
+				  " can not be used in trans section"]},
+		 {{in,[OBJ,".",ID]},[E|Es]}
+	 end,[],Es0).
 
 lint_in_variable({identifier,Ln,ID},Sym,Es) ->
     lint_in_variable_(ID,Ln,Sym,Es);
@@ -410,80 +409,126 @@ lint_timeout_(ID,Ln,Sym,Es) ->
 	    {{timeout,ID},[E|Es]}
     end.
 
-
-%% lint SAT formula, for identifiers, timeout a callback is used
-lint_sat(I={identifier,_Ln,_ID},Lookup,Es) ->
+%%
+%% expr(Expr,Class,Type,Lookup,Es) -> {Expr',Es'}
+%% Class = in|out|def(|trans)
+%% Type  = boolean|unsigned|integer
+%%
+expr(I={identifier,_Ln,_ID},_Class,_Type,Lookup,_Vs,Es) ->
     Lookup(I,Es);
-lint_sat(I={field,_Ln,_OBJ,_ID},Lookup,Es) ->
+expr(I={field,_Ln,_OBJ,_ID},_Class,_Type,Lookup,_Vs,Es) ->
     Lookup(I,Es);
-lint_sat(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,Es) ->
+expr(I={timeout,_Ln,{identifier,_Ln,_ID}},_Class,_Type,Lookup,_Vs,Es) ->
     Lookup(I,Es);
-lint_sat({decnum,_Ln,"0"},_Lookup,Es) -> {{const,0},Es};
-lint_sat({decnum,_Ln,"1"},_Lookup,Es) -> {{const,1},Es};
-lint_sat({Op,_Ln,R,L},Lookup,Es) when 
+expr({true,Ln},_Class,Type,_Lookup,_Vs,Es) ->
+    if Type =/= boolean ->
+	    const(1,Ln,Type,Es);
+       true ->
+	    {{const,true},Es}
+    end;
+expr({false,Ln},_Class,Type,_Lookup,_Vs,Es) ->
+    if Type =/= boolean ->
+	    const(0,Ln,Type,Es);
+       true ->
+	    {{const,false},Es}
+    end;
+expr({decnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+    const(list_to_integer(Ds,10),Ln,Type,Es);
+expr({hexnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+    const(list_to_integer(Ds,16),Ln,Type,Es);
+expr({octnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+    const(list_to_integer(Ds,8),Ln,Type,Es);
+expr({binnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+    const(list_to_integer(Ds,2),Ln,Type,Es);
+expr({flonum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+    const(list_to_float(Ds),Ln,Type,Es);
+expr({pred,Ln,{identifier,_,P},Args},Class,_Type,Lookup,Vs,Es) ->
+    if Class =:= in ->
+	    {As,Es1} = pred_args(Args,[],Lookup,Vs,Es),
+	    {{pred,P,As},Es1};
+       true ->
+	    {{pred,P,Args},
+	     [{Ln,?MODULE,["predicate not allowed in sat formula"]}|Es]}
+    end;
+expr({'ALL',Ln,{identifier,_,X},F},Class,Type,Lookup,Vs,Es) ->
+    if Class =:= in ->
+	    {F1,Es1} = expr(F,Lookup,Class,Type,[{var,X}|Vs],Es),    
+	    {{'ALL',{var,X},F1},Es1};
+       true ->
+	    {{'ALL',{var,X},F},
+	     [{Ln,?MODULE,["quantifier not allowed"]}|Es]}
+    end;
+expr({'SOME',Ln,{identifier,_,X},F},Class,Type,Lookup,Vs,Es) ->
+    if Class =:= in ->
+	    {F1,Es1} = expr(F,Lookup,Class,Type,[{var,X}|Vs],Es),
+	    {{'SOME',{var,X},F1},Es1};
+       true ->
+	    {{'SOME',{var,X},F},
+	     [{Ln,?MODULE,["quantifier not allowed"]}|Es]}
+    end;
+expr({Op,_Ln,L,R},Class,_Type,Lookup,Vs,Es) when 
       Op =:= '&&'; Op =:= '||'; Op =:= '->'; Op =:= '<->' ->
-    {L1,Es1} = lint_sat(L,Lookup,Es),
-    {R1,Es2} = lint_sat(R,Lookup,Es1),
+    %% assert Type == boolean
+    {L1,Es1} = expr(L,Class,boolean,Lookup,Vs,Es),
+    {R1,Es2} = expr(R,Class,boolean,Lookup,Vs,Es1),
     {{Op,L1,R1},Es2};
-lint_sat({Op,_Ln,R,L},Lookup,Es) when 
+expr({Op,_Ln,L,R},Class,_Type,Lookup,Vs,Es) when 
       Op =:= '<'; Op =:= '<='; Op =:= '>'; Op =:= '>='; 
       Op =:= '=='; Op =:= '!=' ->
-    {L1,Es1} = lint_arith(L,Lookup,Es),
-    {R1,Es2} = lint_arith(R,Lookup,Es1),
+    %% assert Type == boolean
+    {L1,Es1} = expr(L,Class,integer,Lookup,Vs,Es),
+    {R1,Es2} = expr(R,Class,integer,Lookup,Vs,Es1),
     {{Op,L1,R1},Es2};
-lint_sat({Op,_Ln,M},Lookup,Es) when 
+expr({Op,_Ln,M},Class,_Type,Lookup,Vs,Es) when 
       Op =:= '!' ->
-    {M1,Es1} = lint_sat(M,Lookup,Es),
+    %% assert Type == boolean
+    {M1,Es1} = expr(M,Class,boolean,Lookup,Vs,Es),
     {{Op,M1},Es1};
-lint_sat({pred,Ln,{identifier,_,P},Args},_Lookup,Es) ->
-    {{pred,P,Args},
-     [{Ln,?MODULE,["predicate not allowed in sat formula"]}|Es]}; 
-lint_sat({'ALL',Ln,{identifier,_,X},F},_Lookup,Es) ->
-    {{'ALL',{var,X},F},
-     [{Ln,?MODULE,["quantifier not allowed in sat formula"]}|Es]};
-lint_sat({'SOME',Ln,{identifier,_,X},F},_Lookup,Es) ->
-    {{'SOME',{var,X},F},
-     [{Ln,?MODULE,["quantifier not allowed in sat formula"]}|Es]}.
-
-
-%% lint PRED formula, for identifiers, timeout a callback is used
-lint_pred(F, Lookup, Es) ->
-    lint_pred(F, Lookup, [], Es).
-
-lint_pred(I={identifier,_Ln,_ID},Lookup,_Vs,Es) ->
-    Lookup(I,Es);
-lint_pred(I={field,_Ln,_OBJ,_ID},Lookup,_Vs,Es) ->
-    Lookup(I,Es);
-lint_pred(I={timeout,_Ln,{identifier,_Ln,_ID}},Lookup,_Vs,Es) ->
-    Lookup(I,Es);
-lint_pred({decnum,_Ln,"0"},_Lookup,_Vs,Es) -> {{const,0},Es};
-lint_pred({decnum,_Ln,"1"},_Lookup,_Vs,Es) -> {{const,1},Es};
-lint_pred({pred,_Ln,{identifier,_,P},Args},Lookup,Vs,Es) ->
-    {As,Es1} = lint_pred_args(Args,[],Lookup,Vs,Es),
-    {{pred,P,As},Es1};
-lint_pred({'ALL',_Ln,{identifier,_,X},F},Lookup,Vs,Es) ->
-    {F1,Es1} = lint_pred(F,Lookup,[{var,X}|Vs],Es),
-    {{'ALL',{var,X},F1},Es1};
-lint_pred({'SOME',_Ln,{identifier,_,X},F},Lookup,Vs,Es) ->
-    {F1,Es1} = lint_pred(F,Lookup,[{var,X}|Vs],Es),
-    {{'SOME',{var,X},F1},Es1};
-lint_pred({Op,_Ln,R,L},Lookup,Vs,Es) when 
-      Op =:= '&&'; Op =:= '||'; Op =:= '->'; Op =:= '<->' ->
-    {L1,Es1} = lint_pred(L,Lookup,Vs,Es),
-    {R1,Es2} = lint_pred(R,Lookup,Vs,Es1),
+expr({Op,_Ln,L,R},Class,_Type,Lookup,Vs,Es) when 
+      Op =:= '+'; Op =:= '-'; Op =:= '*'; Op =:= '/'; Op =:= '%' ->
+    %% assert Type == unsigned|integer
+    {L1,Es1} = expr(L,Class,integer,Lookup,Vs,Es),
+    {R1,Es2} = expr(R,Class,integer,Lookup,Vs,Es1),
     {{Op,L1,R1},Es2};
-lint_pred({Op,_Ln,R,L},Lookup,_Vs,Es) when 
-      Op =:= '<'; Op =:= '<='; Op =:= '>'; Op =:= '>='; 
-      Op =:= '=='; Op =:= '!=' ->
-    {L1,Es1} = lint_arith(L,Lookup,Es),
-    {R1,Es2} = lint_arith(R,Lookup,Es1),
-    {{Op,L1,R1},Es2};
-lint_pred({Op,_Ln,M},Lookup,Vs,Es) when 
-      Op =:= '!' ->
-    {M1,Es1} = lint_pred(M,Lookup,Vs,Es),
+expr({Op,_Ln,M},Class,_Type,Lookup,Vs,Es) when 
+      Op =:= '-' ->
+    %% assert Type == unsigned|integer
+    {M1,Es1} = expr(M,Class,integer,Lookup,Vs,Es),
     {{Op,M1},Es1}.
 
-lint_pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
+%% constant check
+const(Const,_Ln,float,Es) when is_float(Const) ->
+    {{const,Const}, Es};
+const(Const,_Ln,float,Es) when is_integer(Const) ->
+    {{const,float(Const)}, Es};
+const(Const,Ln,Type,Es) when is_float(Const) ->
+    const(trunc(Const),Ln,Type,Es);  %% FIXME?? error? warning?
+const(Const,Ln,boolean,Es) ->
+    Bool = (Const =/= 0),
+    {{const,Bool},
+     [{Ln,?MODULE,["constant is not a boolean"]}|Es]};
+const(Const,Ln,unsigned8,Es) when Const < 0; Const > 16#ff ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in unsigned8 range"]}|Es]};
+const(Const,Ln,unsigned16,Es) when Const < 0; Const > 16#ffff ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in unsigned16 range"]}|Es]};
+const(Const,Ln,unsigned32,Es) when Const < 0; Const > 16#ffffffff ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in unsigned32 range"]}|Es]};
+const(Const,Ln,integer8,Es) when Const < -16#80; Const > 16#7f ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in integer8 range"]}|Es]};
+const(Const,Ln,integer16,Es) when Const < -16#8000; Const > 16#7fff ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in integer16 range"]}|Es]};
+const(Const,Ln,integer32,Es) when Const < -16#80000000; Const > 16#7fffffff ->
+    {{const,Const},
+     [{Ln,?MODULE,["constant not in integer32 range"]}|Es]};
+const(Const,_Ln,_Type,Es) ->
+    {{const,Const}, Es}.
+    
+pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
     {F1,Es1} = case F of
 		   {identifier,_Ln,X} ->
 		       case lists:member({var,X},Vs) of
@@ -498,8 +543,8 @@ lint_pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
 		   {binnum,_Ln,Ds} -> {{const,list_to_integer(Ds,2)},Es};
 		   {flonum,_Ln,Ds} -> {{const,list_to_float(Ds)},Es}
 	       end,
-    lint_pred_args(Fs,[F1|Acc],Lookup,Vs,Es1);
-lint_pred_args([],Acc,_Lookup,_Vs,Es) ->
+    pred_args(Fs,[F1|Acc],Lookup,Vs,Es1);
+pred_args([],Acc,_Lookup,_Vs,Es) ->
     {lists:reverse(Acc),Es}.
 
 get_number({decnum,_Ln,Ds}) -> list_to_integer(Ds,10);
@@ -507,23 +552,6 @@ get_number({hexnum,_Ln,[$0,$x|Ds]}) -> list_to_integer(Ds,16);
 get_number({octnum,_Ln,[$0|Ds]}) -> list_to_integer(Ds,8);
 get_number({binnum,_Ln,[$0,$b|Ds]}) -> list_to_integer(Ds,2);
 get_number({flonum,_Ln,Ds}) -> list_to_float(Ds).
-
-lint_arith(ID={identifier,_Ln,_X}, Lookup, Es) ->
-    Lookup(ID,Es);
-lint_arith({decnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,10)},Es};
-lint_arith({hexnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,16)},Es};
-lint_arith({octnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,8)},Es};
-lint_arith({binnum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_integer(Ds,2)},Es};	
-lint_arith({flonum,_Ln,Ds},_Lookup,Es) -> {{const,list_to_float(Ds)},Es};
-lint_arith({Op,_Ln,R,L},Lookup,Es) when 
-      Op =:= '+'; Op =:= '-'; Op =:= '*'; Op =:= '/'; Op =:= '%' ->
-    {L1,Es1} = lint_arith(L,Lookup,Es),
-    {R1,Es2} = lint_arith(R,Lookup,Es1),
-    {{Op,L1,R1},Es2};
-lint_arith({Op,_Ln,M},Lookup,Es) when 
-      Op =:= '-' ->
-    {M1,Es1} = lint_arith(M,Lookup,Es),
-    {{Op,M1},Es1}.
 
 index(Key,Keys) ->
     index_(Key,Keys,1).

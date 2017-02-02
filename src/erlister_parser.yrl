@@ -36,18 +36,19 @@ Terminals
 	'machine' 'in' 'def' 'out' 'clocks' 'states' 'trans' 'start' 'timeout'
 	'submachines' 'submachine' identifier
         flonum hexnum octnum binnum decnum
+        true false
         boolean unsigned8 unsigned16 unsigned32
         integer8 integer16 integer32
 	.
 
 Left 200  '->'.
-Left 300  '<->'.
-Left 400  '||'.
-Left 500  '&&'.
-Left 600  '<' '>' '==' '!=' '<=' '>='.
-Left 700  '+' '-'.
-Left 800  '*' '/' '%'.
-Unary 1000 '!' 'ALL' 'SOME'.
+Left 250  '<->'.
+Left 300  '||'.
+Left 400  '&&'.
+Left 500  '<' '>' '==' '!=' '<=' '>='.
+Left 600  '+' '-'.
+Left 700  '*' '/' '%'.
+Unary 900 '!' 'ALL' 'SOME'.
 
 Rootsymbol definitions.
 
@@ -163,7 +164,9 @@ type -> integer8   : integer8.
 type -> integer16  : integer16.
 type -> integer32  : integer32.
 type -> '$empty'   : boolean.
-     
+
+formula -> true  : '$1'.
+formula -> false : '$1'.
 formula -> arith : '$1'.
 formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
 formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
@@ -186,11 +189,20 @@ comp -> arith '==' arith : {'==',line('$1'),'$1','$3'}.
 comp -> arith '!=' arith : {'!=',line('$1'),'$1','$3'}.
 
 arith -> argument : '$1'.
-arith -> arith '+' arith : {'+','$1','$3'}.
-arith -> arith '-' arith : {'-','$1','$3'}.
-arith -> arith '*' arith : {'*','$1','$3'}.
-arith -> arith '/' arith : {'/','$1','$3'}.
-arith -> arith '%' arith : {'%','$1','$3'}.
+arith -> '-' argument :
+	     case '$2' of
+		 {decnum,Ln,Ds} -> {decnum,Ln,[$-|Ds]};
+		 {hexnum,Ln,Ds} -> {hexnum,Ln,[$-|Ds]};
+		 {octnum,Ln,Ds} -> {octnum,Ln,[$-|Ds]};
+		 {binnum,Ln,Ds} -> {binnum,Ln,[$-|Ds]};
+		 {flonum,Ln,Ds} -> {flonum,Ln,[$-|Ds]};
+		 _ -> {'-',line('$1'),'$2'}
+	     end.
+arith -> arith '+' arith : {'+',line('$1'),'$1','$3'}.
+arith -> arith '-' arith : {'-',line('$1'),'$1','$3'}.
+arith -> arith '*' arith : {'*',line('$1'),'$1','$3'}.
+arith -> arith '/' arith : {'/',line('$1'),'$1','$3'}.
+arith -> arith '%' arith : {'%',line('$1'),'$1','$3'}.
 
 number -> flonum : '$1'.
 number -> hexnum : '$1'.

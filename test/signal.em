@@ -1,4 +1,4 @@
-//
+// -*- c -*-
 // Composed Machine example
 //
 

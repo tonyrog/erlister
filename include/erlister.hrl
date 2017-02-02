@@ -2,6 +2,7 @@
 -ifndef(__ERLISTER_HRL__).
 -define(__ERLISTER_HRL__, true).
 
+%% boolean is an alias for unsigned8 and may be as such
 -type type_t() :: boolean|unsigned8|unsigned16|unsigned32|
 		  integer8|integer16|integer32.
 -type class_t() :: in|out|def.

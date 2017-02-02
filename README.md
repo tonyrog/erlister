@@ -22,9 +22,9 @@ over an external domain of configuration data. This can be used to
 instantiate the machine.
 
     in x, y, z;
-    in do_interval = ALL output 
-                         have_interval_hardware(output) ||
-                         can_simulate_interval(output);
+    in do_interval = ALL output
+              	        have_interval_hardware(output) ||
+                        can_simulate_interval(output);
 
 The def variables is a list of variables with a corresponding boolean formula
 defining the variable. It can be thought of as a shortcut for
@@ -132,20 +132,28 @@ note that not all parts are valid in all sections.
               | <identifier>
               | <identifier> "(" [ <arg> ( "," <arg> ) ] ")"
               | <identifier> "." <identifier>
+              | "-" <formula>
+              | <formula> "+" <formula>
+              | <formula> "-" <formula>
+              | <formula> "*" <formula>
+              | <formula> "/" <formula>
+              | <formula> "%" <formula>
+              | <formula> "<" <formula>
+              | <formula> "<=" <formula>
+              | <formula> ">=" <formula>
+              | <formula> ">" <formula>
+              | <formula> "==" <formula>
+              | <formula> "!=" <formula>
               | "!" <formula>
               | <formula> "&&" <formula>
               | <formula> "||" <formula>
               | <formula> "->" <formula>
-              | <formula> "<->" <formula>
               | "ALL" <identifier> <formula>
               | "SOME" <identifier> <formula>
 
 # Roadmap
 
-- Add canopen types, boolean, unsigned8, unsigned16, unsigned32, integer8,
-  integer16,integer32 as types to 'in','def' and 'out' declarations.
-- Add comparison operations "<","<=",">",">=","==" and "!=" to formulas
-- Add arithmetic and bit operators in formulas.
+- Add bit operators in formulas.
 - Add "running(T)" for timer to check if timer is running, then 
   def never_started = !running(T) && !timeout(T)
 - Add ramp object R for generating output ramps over time, ramp object may

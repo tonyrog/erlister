@@ -224,6 +224,8 @@ arglist([A|As],Pre,Sep,Del) -> [Pre,A,Sep,Del | arglist(As,Pre,Sep,Del)].
 formula(SELF,in,Name,undefined) -> ["ctx->in_",fid(SELF,Name)];
 formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
 
+formula(_SELF,_Class,{const,true})     -> "1";
+formula(_SELF,_Class,{const,false})     -> "0";
 formula(_SELF,_Class,{const,C})        -> integer_to_list(C);
 formula(SELF,trans,{in,ID,boolean})    -> fid(SELF,ID);
 formula(SELF,trans,{in,ID,_Type})      -> fid(SELF,ID);
