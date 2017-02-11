@@ -103,9 +103,10 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
      [[?T,"timer_init(&ctx->clk_",ID,"_",T,")",?E] || #clock{id=T} <- CLOCKS],
      
-     [ [?T,"ctx->st_",M#machine.name," = ",
-	[M#machine.name,"_",hd(state_names(M#machine.states))],?E] ||
-	 M <- MACHINES],
+     [if M#machine.states =:= [] -> [];
+	 true -> [?T,"ctx->st_",M#machine.name," = ",
+		  [M#machine.name,"_",hd(state_names(M#machine.states))],?E]
+      end || M <- MACHINES],
      if STATES =:= [] ->
 	     [];
 	true ->

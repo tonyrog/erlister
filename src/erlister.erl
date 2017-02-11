@@ -55,11 +55,11 @@ do_input(Props, File) ->
 				       apply(Mod,format_error,[Message])]),
 			    halt(1);
 			{ok,Machine} ->
-			    io:format("machine ~p\n", [Machine]),
+			    %% io:format("machine ~p\n", [Machine]),
 			    case erlister_lint:machine(Machine) of
 				{Machine1,[]} ->
 				    do_emit(Props, Machine1);
-				{Machine1,ERR} ->
+				{_Machine1,ERR} ->
 				    lists:foreach(
 				      fun({Ln,Mod,Message}) ->
 					      io:format("~s:~w: ~s\n", 
@@ -68,7 +68,7 @@ do_input(Props, File) ->
 							       format_error,
 							       [Message])])
 				      end, lists:keysort(1,ERR)),
-				    io:format("machine' ~p\n", [Machine1]),
+				    %% io:format("machine' ~p\n", [Machine1]),
 				    halt(1)
 			    end
 		    end;
@@ -83,7 +83,7 @@ do_input(Props, File) ->
 
 do_emit(Props, Machine) ->
     Machine1 = erlister_eval:machine(Machine),
-    io:format("machine' ~p\n", [Machine1]),
+    %% io:format("machine' ~p\n", [Machine1]),
     Code =
 	case proplists:get_value(lang,Props,c) of
 	    c -> erlister_c_code:code(Machine1);

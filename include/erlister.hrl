@@ -1,4 +1,3 @@
-
 -ifndef(__ERLISTER_HRL__).
 -define(__ERLISTER_HRL__, true).
 

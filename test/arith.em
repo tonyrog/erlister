@@ -2,6 +2,8 @@
 
 machine arithmetic;
 
+submachines A, B, C;
+
 boolean    in x1;
 unsigned8  in x2;
 unsigned16 in x3;
@@ -25,3 +27,18 @@ unsigned32 out z4 = y4;
 integer8   out z5 = y5;
 integer16  out z6 = y6;
 integer32  out z7 = y7;
+
+submachine A;
+
+unsigned16 in u = B.v + C.v + 2;
+unsigned16 out v = u;
+
+submachine B;
+
+unsigned16 in u = A.v;
+unsigned16 out v = u;
+
+submachine C;
+
+unsigned16 in u = B.v;
+unsigned16 out v = u;

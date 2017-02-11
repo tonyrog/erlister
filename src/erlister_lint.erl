@@ -248,8 +248,8 @@ lint_out([],Acc,_Sym,_Sub,Es) ->
 
 lint_dsat(Form,Type,Sym,Es0) ->
     expr(Form,def,Type,
-	 fun(I={identifier,_Ln,_ID},Es) ->
-		 lint_in_variable(I,Sym,Es);
+	 fun(_I={identifier,Ln,ID},Es) ->
+		 lint_in_def_variable_(ID,Ln,Sym,Es);
 	    (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
 		 lint_in_variable(I,Sym,Es);
 	    ({timeout,Ln,{identifier,_Ln,ID}},Es) ->
@@ -452,7 +452,7 @@ expr({pred,Ln,{identifier,_,P},Args},Class,_Type,Lookup,Vs,Es) ->
     end;
 expr({'ALL',Ln,{identifier,_,X},F},Class,Type,Lookup,Vs,Es) ->
     if Class =:= in ->
-	    {F1,Es1} = expr(F,Lookup,Class,Type,[{var,X}|Vs],Es),    
+	    {F1,Es1} = expr(F,Class,Type,Lookup,[{var,X}|Vs],Es),    
 	    {{'ALL',{var,X},F1},Es1};
        true ->
 	    {{'ALL',{var,X},F},
@@ -460,7 +460,7 @@ expr({'ALL',Ln,{identifier,_,X},F},Class,Type,Lookup,Vs,Es) ->
     end;
 expr({'SOME',Ln,{identifier,_,X},F},Class,Type,Lookup,Vs,Es) ->
     if Class =:= in ->
-	    {F1,Es1} = expr(F,Lookup,Class,Type,[{var,X}|Vs],Es),
+	    {F1,Es1} = expr(F,Class,Type,Lookup,[{var,X}|Vs],Es),
 	    {{'SOME',{var,X},F1},Es1};
        true ->
 	    {{'SOME',{var,X},F},

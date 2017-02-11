@@ -169,7 +169,6 @@ formula -> true  : '$1'.
 formula -> false : '$1'.
 formula -> arith : '$1'.
 formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
-formula -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
 formula -> comp : '$1'.
 formula -> '!' formula : {'!',line('$1'),'$2'}.
 formula -> '(' formula ')' : '$2'.
@@ -188,7 +187,9 @@ comp -> arith '<=' arith : {'<=',line('$1'),'$1','$3'}.
 comp -> arith '==' arith : {'==',line('$1'),'$1','$3'}.
 comp -> arith '!=' arith : {'!=',line('$1'),'$1','$3'}.
 
-arith -> argument : '$1'.
+arith -> number : '$1'.
+arith -> identifier : '$1'.
+arith -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
 arith -> '-' argument :
 	     case '$2' of
 		 {decnum,Ln,Ds} -> {decnum,Ln,[$-|Ds]};
