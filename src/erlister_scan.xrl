@@ -36,6 +36,10 @@ false           : {token,{false,TokenLine}}.
 \&\&		: {token,{'&&',TokenLine}}.
 \|\|		: {token,{'||',TokenLine}}.
 \!		: {token,{'!',TokenLine}}.
+\&		: {token,{'&',TokenLine}}.
+\|		: {token,{'|',TokenLine}}.
+\^		: {token,{'^',TokenLine}}.
+\~		: {token,{'~',TokenLine}}.
 ->		: {token,{'->',TokenLine}}.
 <->		: {token,{'<->',TokenLine}}.
 ALL		: {token,{'ALL',TokenLine}}.
@@ -61,9 +65,11 @@ SOME		: {token,{'SOME',TokenLine}}.
 \*		: {token,{'*',TokenLine}}.
 /		: {token,{'/',TokenLine}}.
 \%		: {token,{'%',TokenLine}}.
+<<		: {token,{'<<',TokenLine}}.
 <=		: {token,{'<=',TokenLine}}.
 >=		: {token,{'>=',TokenLine}}.
 <		: {token,{'<',TokenLine}}.
+>>		: {token,{'>>',TokenLine}}.
 >		: {token,{'>',TokenLine}}.
 ==		: {token,{'==',TokenLine}}.
 !=		: {token,{'!=',TokenLine}}.

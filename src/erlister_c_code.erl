@@ -245,40 +245,41 @@ formula(SELF,_Class,{def,ID,_Type})    -> fid(SELF,ID);
 formula(SELF,_Class,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];
 formula(SELF,_Class,{timeout,ID}) ->
     ["timer_timeout(&ctx->clk_",fid(SELF,ID),")"];
-formula(SELF,Class,{'&&',L,R}) ->
-    ["(",formula(SELF,Class,L),") && (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'||',L,R}) ->
-    ["(",formula(SELF,Class,L),") || (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'->',L,R}) ->
-    ["!(",formula(SELF,Class,L),") || (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'<->',L,R}) ->
-    ["(",formula(SELF,Class,L),") == (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'<',L,R}) ->
-    ["(",formula(SELF,Class,L),") < (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'<=',L,R}) ->
-    ["(",formula(SELF,Class,L),") <= (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'>',L,R}) ->
-    ["(",formula(SELF,Class,L),") > (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'>=',L,R}) ->
-    ["(",formula(SELF,Class,L),") >= (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'==',L,R}) ->
-    ["(",formula(SELF,Class,L),") == (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'!=',L,R}) ->
-    ["(",formula(SELF,Class,L),") != (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'+',L,R}) ->
-    ["(",formula(SELF,Class,L),") + (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'-',L,R}) ->
-    ["(",formula(SELF,Class,L),") - (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'*',L,R}) ->
-    ["(",formula(SELF,Class,L),") * (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'/',L,R}) ->
-    ["(",formula(SELF,Class,L),") / (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'%',L,R}) ->
-    ["(",formula(SELF,Class,L),") % (",formula(SELF,Class,R),")"];
-formula(SELF,Class,{'-',F}) ->
-    ["-(",formula(SELF,Class,F),")"];
-formula(SELF,Class,{'!',F}) -> 
-    ["!(",formula(SELF,Class,F),")"].
+formula(SELF,Class,{'&&',L,R}) -> logic(SELF,Class,"&&",L,R);
+formula(SELF,Class,{'||',L,R}) -> logic(SELF,Class,"||",L,R);
+formula(SELF,Class,{'->',L,R}) -> logic(SELF,Class,"||",{'!',L},R);
+formula(SELF,Class,{'<->',L,R}) -> logic(SELF,Class,"==",L,R);
+formula(SELF,Class,{'<',L,R}) -> comp(SELF,Class,"<",L,R);
+formula(SELF,Class,{'<=',L,R}) -> comp(SELF,Class,"<=",L,R);
+formula(SELF,Class,{'>',L,R}) -> comp(SELF,Class,">",L,R);
+formula(SELF,Class,{'>=',L,R}) -> comp(SELF,Class,">=",L,R);
+formula(SELF,Class,{'==',L,R}) -> comp(SELF,Class,"==",L,R);
+formula(SELF,Class,{'!=',L,R}) -> comp(SELF,Class,"!=",L,R);
+formula(SELF,Class,{'+',L,R}) -> arith(SELF,Class,"+",L,R);
+formula(SELF,Class,{'-',L,R}) -> arith(SELF,Class,"-",L,R);
+formula(SELF,Class,{'*',L,R}) -> arith(SELF,Class,"*",L,R);
+formula(SELF,Class,{'/',L,R}) -> arith(SELF,Class,"/",L,R);
+formula(SELF,Class,{'%',L,R}) -> arith(SELF,Class,"%",L,R);
+formula(SELF,Class,{'&',L,R}) -> arith(SELF,Class,"&",L,R);
+formula(SELF,Class,{'|',L,R}) -> arith(SELF,Class,"|",L,R);
+formula(SELF,Class,{'^',L,R}) -> arith(SELF,Class,"^",L,R);
+formula(SELF,Class,{'<<',L,R}) -> arith(SELF,Class,"<<",L,R);
+formula(SELF,Class,{'>>',L,R}) -> arith(SELF,Class,">>",L,R);
+formula(SELF,Class,{'-',F}) -> arith(SELF,Class,"-",F);
+formula(SELF,Class,{'~',F}) -> arith(SELF,Class,"~",F);
+formula(SELF,Class,{'!',F}) -> arith(SELF,Class,"!",F).
+
+logic(SELF,Class,OP,L,R) ->
+    ["(",formula(SELF,Class,L),") ",OP," (",formula(SELF,Class,R),")"].
+
+comp(SELF,Class,OP,L,R) ->
+    ["(",formula(SELF,Class,L),") ",OP," (",formula(SELF,Class,R),")"].
+
+arith(SELF,Class,OP,F) ->
+    [OP,"(",formula(SELF,Class,F),")"].
+
+arith(SELF,Class,OP,L,R) ->
+    ["(",formula(SELF,Class,L),") ",OP," (",formula(SELF,Class,R),")"].
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.

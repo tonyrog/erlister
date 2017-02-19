@@ -30,6 +30,7 @@ Nonterminals
 
 Terminals
 	'&&' '||' '!' '->' '<->' 'ALL' 'SOME'
+        '&' '^' '|' '~' '<<' '>>'
 	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-'
         '<=' '>=' '<' '>' '==' '!='
         '+' '*' '/' '%'
@@ -45,10 +46,15 @@ Left 200  '->'.
 Left 250  '<->'.
 Left 300  '||'.
 Left 400  '&&'.
-Left 500  '<' '>' '==' '!=' '<=' '>='.
+Left 410  '|'.
+Left 420  '^'.
+Left 430  '&'.
+Left 440  '==' '!='.
+Left 450  '<' '>'  '<=' '>='.
+Left 500  '<<' '>>'.
 Left 600  '+' '-'.
 Left 700  '*' '/' '%'.
-Unary 900 '!' 'ALL' 'SOME'.
+Unary 900 '!' '~' 'ALL' 'SOME'.
 
 Rootsymbol definitions.
 
@@ -199,11 +205,17 @@ arith -> '-' argument :
 		 {flonum,Ln,Ds} -> {flonum,Ln,[$-|Ds]};
 		 _ -> {'-',line('$1'),'$2'}
 	     end.
+arith -> '~' arith : {'-',line('$1'),'$2'}.
 arith -> arith '+' arith : {'+',line('$1'),'$1','$3'}.
 arith -> arith '-' arith : {'-',line('$1'),'$1','$3'}.
 arith -> arith '*' arith : {'*',line('$1'),'$1','$3'}.
 arith -> arith '/' arith : {'/',line('$1'),'$1','$3'}.
 arith -> arith '%' arith : {'%',line('$1'),'$1','$3'}.
+arith -> arith '&' arith : {'&',line('$1'),'$1','$3'}.
+arith -> arith '|' arith : {'|',line('$1'),'$1','$3'}.
+arith -> arith '^' arith : {'^',line('$1'),'$1','$3'}.
+arith -> arith '<<' arith : {'<<',line('$1'),'$1','$3'}.
+arith -> arith '>>' arith : {'>>',line('$1'),'$1','$3'}.
 
 number -> flonum : '$1'.
 number -> hexnum : '$1'.

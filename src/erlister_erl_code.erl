@@ -305,34 +305,37 @@ formula_(SELF,_Class,_Type,{state,ID}) ->
     ["(ST_",mid(SELF,ID)," =:= ", ?Q,fld(ID),?Q,")"];
 formula_(SELF,_Class,_Type,{timeout,ID}) ->
     ["(","CLK_",fid(SELF,ID)," =:= timeout)"];
-formula_(SELF,Class,Type,{'&&',L,R}) ->
-    logic(SELF,Class,Type," andalso ",L,R);
-formula_(SELF,Class,Type,{'||',L,R}) ->
-    logic(SELF,Class,Type," orelse ",L,R);
-formula_(SELF,Class,boolean,{'->',L,R}) ->
-    formula_(SELF,Class,boolean,{'||',{'!',L},R});
-formula_(SELF,Class,Type,{'<->',L,R}) ->
-    logic(SELF,Class,Type," =:= ",L,R);
+formula_(SELF,Class,Type,{'&&',L,R}) -> logic(SELF,Class,Type," andalso ",L,R);
+formula_(SELF,Class,Type,{'||',L,R}) -> logic(SELF,Class,Type," orelse ",L,R);
+formula_(SELF,Class,Type,{'->',L,R}) -> formula_(SELF,Class,Type,{'||',{'!',L},R});
+formula_(SELF,Class,Type,{'!',F}) -> logic(SELF,Class,Type,"not",F);
+formula_(SELF,Class,Type,{'<->',L,R}) -> logic(SELF,Class,Type," =:= ",L,R);
 formula_(SELF,Class,Type,{'<',L,R}) ->  compare(SELF,Class,Type,"<",L,R);
 formula_(SELF,Class,Type,{'<=',L,R}) -> compare(SELF,Class,Type,"=<",L,R);
 formula_(SELF,Class,Type,{'>',L,R}) ->  compare(SELF,Class,Type,">",L,R);
 formula_(SELF,Class,Type,{'>=',L,R}) -> compare(SELF,Class,Type,">=",L,R);
 formula_(SELF,Class,Type,{'==',L,R}) -> compare(SELF,Class,Type,"=:=",L,R);
 formula_(SELF,Class,Type,{'!=',L,R}) -> compare(SELF,Class,Type,"=/=",L,R);
-formula_(SELF,Class,Type,{'+',L,R}) ->
-    ["(",formula_(SELF,Class,Type,L),") + (",formula_(SELF,Class,Type,R),")"];
-formula_(SELF,Class,Type,{'-',L,R}) ->
-    ["(",formula_(SELF,Class,Type,L),") - (",formula_(SELF,Class,Type,R),")"];
-formula_(SELF,Class,Type,{'*',L,R}) ->
-    ["(",formula_(SELF,Class,Type,L),") * (",formula_(SELF,Class,Type,R),")"];
-formula_(SELF,Class,Type,{'/',L,R}) ->
-    ["(",formula_(SELF,Class,Type,L),") div (",formula_(SELF,Class,Type,R),")"];
-formula_(SELF,Class,Type,{'%',L,R}) ->
-    ["(",formula_(SELF,Class,Type,L),") rem (",formula_(SELF,Class,Type,R),")"];
-formula_(SELF,Class,Type,{'-',F}) ->
-    ["-(",formula_(SELF,Class,Type,F),")"];
-formula_(SELF,Class,boolean,{'!',F}) ->
-    ["not (",formula_(SELF,Class,boolean,F),")"].
+formula_(SELF,Class,Type,{'+',L,R}) -> arith(SELF,Class,Type,"+",L,R);
+formula_(SELF,Class,Type,{'-',L,R}) -> arith(SELF,Class,Type,"-",L,R);
+formula_(SELF,Class,Type,{'*',L,R}) -> arith(SELF,Class,Type,"*",L,R);
+formula_(SELF,Class,Type,{'/',L,R}) -> arith(SELF,Class,Type,"div",L,R);
+formula_(SELF,Class,Type,{'%',L,R}) -> arith(SELF,Class,Type,"rem",L,R);
+formula_(SELF,Class,Type,{'&',L,R}) -> arith(SELF,Class,Type,"band",L,R);
+formula_(SELF,Class,Type,{'|',L,R}) -> arith(SELF,Class,Type,"bor",L,R);
+formula_(SELF,Class,Type,{'^',L,R}) -> arith(SELF,Class,Type,"bxor",L,R);
+formula_(SELF,Class,Type,{'<<',L,R}) -> arith(SELF,Class,Type,"bsl",L,R);
+formula_(SELF,Class,Type,{'>>',L,R}) -> arith(SELF,Class,Type,"bsr",L,R);
+formula_(SELF,Class,Type,{'~',F}) -> arith(SELF,Class,Type,"bnot",F);
+formula_(SELF,Class,Type,{'-',F}) -> arith(SELF,Class,Type,"-",F).
+
+arith(SELF,Class,Type,Op,F) ->
+    [Op,"(",formula_(SELF,Class,Type,F),")"].
+
+arith(SELF,Class,Type,Op,L,R) ->
+    ["(",formula_(SELF,Class,Type,L),") ",Op," (",
+     formula_(SELF,Class,Type,R),")"].
+
 
 compare(SELF,Class,boolean,Op,L,R) ->
     ["(",formula_(SELF,Class,integer,L),") ",
@@ -342,6 +345,11 @@ compare(SELF,Class,_IntegerType,Op,L,R) ->
     ["?B2I((",formula_(SELF,Class,integer,L),") ",
      Op, 
      " (",formula_(SELF,Class,integer,R),"))"].
+
+logic(SELF,Class,boolean,Op,F) ->
+    [Op,"(",formula_(SELF,Class,boolean,F),")"];
+logic(SELF,Class,_IntegerType,Op,F) ->
+    ["?B2I(",Op,"(",formula_(SELF,Class,boolean,F),"))"].
 
 logic(SELF,Class,boolean,Op,L,R) ->
     ["(",formula_(SELF,Class,boolean,L),") ",
