@@ -9,117 +9,69 @@
 
 -compile(export_all).
 
--define( ZERO,        0).   %% ( -- 0 )
--define( ONE,         1).   %% ( -- 1 )
--define( ADD,         2).   %% ( a b -- (a+b) )
--define( SUB,         3).   %% ( a b -- (a-b) )
--define( MUL,         4).   %% ( a b -- (a*b) )
--define( DIV,         5).   %% ( a b -- (a/b) )
--define( MOD,         6).   %% ( a b -- (a%b) )
--define( AND,         7).   %% ( a b -- (a&b) )
--define( OR,          8).   %% ( a b -- (a|b) )
--define( XOR,         9).   %% ( a b -- (a^b) )
--define( NEG,         10).  %% ( a -- (-a) )
--define( INV,         11).  %% ( a -- (~a) )
--define( BSL,         12).  %% ( a n -- (a << n) )
--define( BSR,         13).  %% ( a n -- (a >> n) )
--define( ASR,         14).  %% ( a n -- (a >> n) )
--define( ZEQ,         16).  %% ( a -- (a==0) )
--define( ZLT,         17).  %% ( a -- (a<0) )
--define( INC,         18).  %% ( a -- (a+1) )
--define( DEC,         19).  %% ( a -- (a-1) )
--define( ABS,         20).  %% ( a -- |a| )
--define( MIN,         21).  %% ( a b -- min(a,b) )
--define( MAX,         22).  %% ( a b -- max(a,b) )
--define( ULT,         24).  %% ( a b -- (a < b) )
--define( LT,          25).  %% ( a b -- (a < b) )
--define( BRAN_B,      26).  %% ( -- )
--define( BRAN_W,      27).  %% ( -- )
--define( ZBRAN_B,     28).  %% ( cond -- )
--define( ZBRAN_W,     29).  %% ( cond -- )
--define( IBRAN_B,     30).  %% ( i -- )
--define( IBRAN_W,     31).  %% ( i -- )
--define( PUSH_B,      32).  %% ( -- b )
--define( PUSH_W,      33).  %% ( -- w )
--define( PUSH_L,      34).  %% ( -- l )
--define( DROP,        35).  %% ( a -- )
--define( STORE,       36).  %% ( a i -- )
--define( FETCH,       37).  %% ( i -- a )
--define( DUP,         38).  %% ( x -- x x )
--define( SWAP,        39).  %% ( x1 x2 -- x2 x1 )
--define( INPUT,       40).  %% ( i -- v )
--define( PARAM,       41).  %% ( i s -- v )
--define( START,       42).  %% ( t i -- )
--define( TIMEOUT,     43).  %% ( i -- bool )
--define( RUNNING,     44).  %% ( i -- bool )
--define( EQ,          45).  %% ( a b -- (a==b) )
--define( ULTE,        46).  %% ( a b -- (a <= b) )
--define( LTE,         47).  %% ( a b -- (a <= b) )
--define( NOT,         48).  %% ( a -- (not a) )
--define( CALL_B,      49).  %% ( -- ) R: ( -- addr )
--define( CALL_W,      50).  %% ( -- ) R: ( -- addr )
--define( RET,         51).  %% ( -- ) R: ( addr -- )
--define( ROT,         52).  %% ( x1 x2 x3 -- x2 x3 x1 )
--define( RROT,        53).  %% ( x1 x2 x3 -- x3 x2 x1 )
--define( OVER,        54).  %% ( x1 x2 -- x1 x2 x1 )
--define( NOP,        254).
--define( EXIT,       255).  %% ( -- )
+-include("szcomp.hrl").
 
 opcodes() ->
-    #{ 0 => ?ZERO,
-       1 => ?ONE,
-       '+' => ?ADD,
+    #{ 
+       %% op:3
+       'nop' => ?NOP,
+       'push.h' => ?PUSH_H,
+       'zbranch.h' => ?ZBRAN_H,
+       'dup' => ?DUP,
+       'rot' => ?ROT,
+       'over' => ?OVER,
+       'drop' => ?DROP,
        '-' => ?SUB,
+       %% op:4
+       '+' => ?ADD,
        '*' => ?MUL,
-       '/' => ?DIV,
-       'mod' => ?MOD,
+       '=' => ?EQ,
        'and' => ?AND,
        'or' => ?OR,
+       '0='  => ?ZEQ,
+       '0<'  => ?ZLT,
+       'not' => ?NOT,
+       %% op:7
+       '/' => ?DIV,
+       'mod' => ?MOD,
        'xor' => ?XOR,
        'negate' => ?NEG,
        'invert' => ?INV,
-       'lshift'  => ?BSL,
-       'rshift'  => ?BSR,
-       'arshift'  => ?ASR,
-       '0='  => ?ZEQ,
-       '0<'  => ?ZLT,
-       '++'  => ?INC,
-       '--'  => ?DEC,
+       '<<'  => ?BSL,
+       '>>'  => ?BSR,
+       '>>a'  => ?ASR,
+       '1+'  => ?INC,
+       '1-'  => ?DEC,
        'abs' => ?ABS,
        'min' => ?MIN,
        'max' => ?MAX,
        'u<'  => ?ULT,
        '<'   => ?LT,
-       'branch.b' => ?BRAN_B,
-       'branch.w' => ?BRAN_W,
-       'zbranch.b' => ?ZBRAN_B,
-       'zbranch.w' => ?ZBRAN_W,
-       'ibranch.b' => ?IBRAN_B,
-       'ibranch.w' => ?IBRAN_W,
-       'push.b' => ?PUSH_B,
-       'push.w' => ?PUSH_W,
-       'push.l' => ?PUSH_L,
-       'drop' => ?DROP,
-       'dup' => ?DUP,
        '!' => ?STORE,
        '@' => ?FETCH,
        'swap' => ?SWAP,
-       'input' => ?INPUT,
-       'param' => ?PARAM,
-       'start' => ?START,
-       'timeout' => ?TIMEOUT,
-       'running' => ?RUNNING,
-       '=' => ?EQ,
-       'u<=' => ?ULTE,
        '<='  => ?LTE,
-       'not' => ?NOT,
+       'u<=' => ?ULTE,
+       ';' => ?RET,
+
+       'push.b' => ?PUSH_B,
+       'push.w' => ?PUSH_W,
+       'push.l' => ?PUSH_L,
+
+       'branch.b' => ?BRAN_B,
+       'branch.w' => ?BRAN_W,
+
+       'zbranch.b' => ?ZBRAN_B,
+       'zbranch.w' => ?ZBRAN_W,
+
+       'ibranch.b' => ?IBRAN_B,
+       'ibranch.w' => ?IBRAN_W,
+
        'call.b' => ?CALL_B,
        'call.w' => ?CALL_W,
-       ';' => ?RET,
-       'rot' => ?ROT,
-       '-rot' => ?RROT,
-       'over' => ?OVER,
-       'nop' => ?NOP,
+       
+       'sys.b' => ?SYS_B,
+
        'exit' => ?EXIT
      }.
 
@@ -140,7 +92,6 @@ asm(Code) ->
     io:format("CODE5 = ~w\n", [Code4]),
     encode_opcodes(Code4).
 
-
 %%
 %% Replace branch labels with offsets
 %% iterate until all labels are resolved
@@ -148,14 +99,19 @@ asm(Code) ->
 resolve_labels(Code) ->
     io:format("RESOLVE = ~w\n", [Code]),
     {AddrMap,Code1} = map_labels(Code),
-    case resolve_near(Code1,AddrMap) of
+    case resolve_tiny(Code1,AddrMap) of
 	{true,Code2} ->
 	    resolve_labels(Code2);
 	{false,Code2} ->
-	    Code3 = resolve_far(Code2),
-	    io:format("RESOLVE FAR = ~w\n", [Code3]),
-	    {AddrMap1,Code4} = map_labels(Code3),
-	    resolve_labels_(Code4, [], AddrMap1, 0)
+	    case resolve_near(Code2,AddrMap) of
+		{true,Code3} ->
+		    resolve_labels(Code3);
+		{false,Code3} ->
+		    Code4 = resolve_far(Code3),
+		    io:format("RESOLVE FAR = ~w\n", [Code4]),
+		    {AddrMap1,Code5} = map_labels(Code4),
+		    resolve_labels_(Code5, [], AddrMap1, 0)
+	    end
     end.
 %%
 %% Set the correct offsets when all jumps are determined
@@ -176,6 +132,10 @@ resolve_labels_([{'call.w',L}|Code], Acc, Map, Addr) ->
     [Target] = maps:get(L, Map),
     Offset = Target - (Addr + 3),
     resolve_labels_(Code, [{'call.w',Offset}|Acc], Map, Addr+3);
+resolve_labels_([{'zbranch.h',L}|Code], Acc, Map, Addr) ->
+    [Target] = maps:get(L, Map),
+    Offset = Target - (Addr + 1),
+    resolve_labels_(Code, [{'zbranch.h',Offset}|Acc], Map, Addr+1);
 resolve_labels_([{'zbranch.b',L}|Code], Acc, Map, Addr) ->
     [Target] = maps:get(L, Map),
     Offset = Target - (Addr + 2),
@@ -207,39 +167,75 @@ resolve_labels_([], Acc, _Map, _Addr) ->
     lists:reverse(Acc).
 
 %%
+%% Locate guaranteed tiny jumps
+%%
+resolve_tiny(Code,Map) ->
+    resolve_tiny_(Code, [], Map, [0], false).
+
+resolve_tiny_([{'zbranch',L}|Code],Acc,Map,Addr,Res) ->
+    Addr1 = add_addr([1,2,3], Addr),
+    Target = maps:get(L, Map),
+    Offset = sub_addr(Target, Addr1),
+    %% if all offsets are short then we select short
+    case is_tiny_addr(Offset) of
+	true ->
+	    resolve_tiny_(Code, [{'zbranch.h',L}|Acc],Map,
+			  add_addr(1,Addr),true);
+	false ->
+	    resolve_tiny_(Code, [{'zbranch',L}|Acc],Map,
+			  Addr1,Res)
+    end;
+resolve_tiny_([{'branch',L}|Code],Acc,Map,Addr,Res) ->
+    Addr1 = add_addr([2,3],Addr),
+    resolve_tiny_(Code, [{'branch',L}|Acc],Map,Addr1,Res);
+resolve_tiny_([{'call',L}|Code],Acc,Map,Addr,Res) ->
+    Addr1 = add_addr([2,3],Addr),
+    resolve_tiny_(Code, [{'call',L}|Acc],Map,Addr1,Res);
+resolve_tiny_([{'ibranch',Ls}|Code],Acc,Map,Addr,Res) ->
+    N = length(Ls),
+    Addr1 = add_addr([1+1+N,1+2+2*N], Addr),
+    resolve_tiny_(Code, [{'ibranch',Ls}|Acc],Map,Addr1,Res);
+resolve_tiny_([Op={block,Block}|Code], Acc, LabelMap, Addr,Res) ->
+    resolve_tiny_(Code, [Op|Acc], LabelMap, add_addr(length(Block),Addr),Res);
+resolve_tiny_([Op={label,_}|Code], Acc, Map, Addr, Res) ->
+    resolve_tiny_(Code, [Op|Acc], Map, Addr, Res);
+resolve_tiny_([Op|Code],Acc,Map,Addr,Res) ->
+    Len = opcode_length(Op),
+    resolve_tiny_(Code, [Op|Acc], Map, add_addr(Len, Addr),Res);
+resolve_tiny_([], Acc, _LabelMap, _Addr,Res) ->
+    {Res,lists:reverse(Acc)}.
+
+%%
 %% Locate guaranteed near jumps
 %%
 resolve_near(Code,Map) ->
     resolve_near_(Code, [], Map, [0], false).
 
 resolve_near_([{'branch',L}|Code],Acc,Map,Addr,Res) ->
-    Addr1 = add_addr(1, Addr),
+    Addr1 = add_addr([2,3], Addr),
     Target = maps:get(L, Map),
     Offset = sub_addr(Target, Addr1),
-    %% if all offsets are short then we select short
     case is_short_addr(Offset) of
 	true ->
 	    resolve_near_(Code, [{'branch.b',L}|Acc],Map,
 			  add_addr(2,Addr),true);
 	false ->
-	    resolve_near_(Code, [{'branch',L}|Acc],Map,
-			  add_addr([2,3],Addr),Res)
+	    resolve_near_(Code, [{'branch',L}|Acc],Map,Addr1,Res)
     end;
 resolve_near_([{'call',L}|Code],Acc,Map,Addr,Res) ->
-    Addr1 = add_addr(1, Addr),
+    Addr1 = add_addr([2,3], Addr),
     Target = maps:get(L, Map),
     Offset = sub_addr(Target, Addr1),
-    %% if all offsets are short then we select short
     case is_short_addr(Offset) of
 	true ->
 	    resolve_near_(Code, [{'call.b',L}|Acc],Map,
 			  add_addr(2,Addr),true);
 	false ->
 	    resolve_near_(Code, [{'call',L}|Acc],Map,
-			  add_addr([2,3],Addr),Res)
+			  Addr1,Res)
     end;
 resolve_near_([{'zbranch',L}|Code],Acc,Map,Addr,Res) ->
-    Addr1 = add_addr([2,3], Addr),
+    Addr1 = add_addr([1,2,3], Addr),
     Target = maps:get(L, Map),
     Offset = sub_addr(Target, Addr1),
     %% if all offsets are short then we select short
@@ -253,9 +249,9 @@ resolve_near_([{'zbranch',L}|Code],Acc,Map,Addr,Res) ->
     end;
 resolve_near_([{'ibranch',Ls}|Code],Acc,Map,Addr,Res) ->
     N = length(Ls),
-    if N > 255 -> 
+    if N > 255 ->
 	    resolve_near_(Code, [{'ibranch.w',Ls}|Acc],Map,
-			  add_addr(1+1+N,Addr),true);
+			  add_addr(1+2+2*N,Addr),true);
        true ->
 	    Addr1 = add_addr([1+1+N,1+2+2*N], Addr),
 	    case lists:all(fun(X) -> X end,
@@ -272,30 +268,16 @@ resolve_near_([{'ibranch',Ls}|Code],Acc,Map,Addr,Res) ->
 				  Addr1,Res)
 	    end
     end;
-resolve_near_([Op={'branch.b',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(2, Addr),Res);
-resolve_near_([Op={'branch.w',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(3, Addr),Res);
-resolve_near_([Op={'call.b',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(2, Addr),Res);
-resolve_near_([Op={'call.w',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(3, Addr),Res);
-resolve_near_([Op={'zbranch.b',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(2, Addr),Res);
-resolve_near_([Op={'zbranch.w',_L}|Code], Acc, LabelMap, Addr,Res) ->
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(3, Addr),Res);
-resolve_near_([Op={'ibranch.b',Ls}|Code], Acc, LabelMap, Addr,Res) ->
-    N = length(Ls),
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(1+1+N, Addr),Res);
-resolve_near_([Op={'ibranch.w',Ls}|Code], Acc, LabelMap, Addr,Res) ->
-    N = length(Ls),
-    resolve_near_(Code, [Op|Acc], LabelMap, add_addr(1+2+2*N, Addr),Res);
 resolve_near_([Op={block,Block}|Code], Acc, LabelMap, Addr,Res) ->
     resolve_near_(Code, [Op|Acc], LabelMap, add_addr(length(Block),Addr),Res);
 resolve_near_([Op={label,_}|Code], Acc, LabelMap, Addr, Res) ->
     resolve_near_(Code, [Op|Acc], LabelMap, Addr, Res);
-resolve_near_([], Acc, _LabelMap, _Addr,Res) ->
+resolve_near_([Op|Code],Acc,Map,Addr,Res) ->
+    Len = opcode_length(Op),
+    resolve_near_(Code, [Op|Acc], Map, add_addr(Len, Addr),Res);
+resolve_near_([], Acc, _Map, _Addr,Res) ->
     {Res,lists:reverse(Acc)}.
+
 
 %% replace all branch/zbranch/ibranch with far offset version
 resolve_far([{'branch',L}|Code]) ->
@@ -335,6 +317,8 @@ map_labels_([Op={'call.b',_}|Code], Acc, Map, Addr) ->
     map_labels_(Code, [Op|Acc], Map, add_addr(2,Addr));
 map_labels_([Op={'call.w',_}|Code], Acc, Map, Addr) ->
     map_labels_(Code, [Op|Acc], Map, add_addr(3,Addr));
+map_labels_([Op={'zbranch.h',_}|Code], Acc, Map, Addr) ->
+    map_labels_(Code, [Op|Acc], Map, add_addr(1,Addr));
 map_labels_([Op={'zbranch.b',_}|Code], Acc, Map, Addr) ->
     map_labels_(Code, [Op|Acc], Map, add_addr(2,Addr));
 map_labels_([Op={'zbranch.w',_}|Code], Acc, Map, Addr) ->
@@ -376,6 +360,10 @@ sub_addr(A, B) when is_integer(A), is_list(B) ->
 sub_addr(A, B) when is_integer(A), is_integer(B) ->
     [ A - B ].
 
+is_tiny_addr([A|_]) when A < -8; A > 7 -> false;
+is_tiny_addr([_|As]) -> is_tiny_addr(As);
+is_tiny_addr([]) -> true.
+
 is_short_addr([A|_]) when A < -128; A > 127 -> false;
 is_short_addr([_|As]) -> is_short_addr(As);
 is_short_addr([]) -> true.
@@ -396,6 +384,16 @@ collect_blocks_([Op={ibranch,_L}|Code], Block, Acc) ->
     collect_blocks_(Code, [], [Op | add_block(Block,Acc)]);
 collect_blocks_([Op={label,_L}|Code], Block, Acc) ->
     collect_blocks_(Code, [], [Op | add_block(Block,Acc)]);
+collect_blocks_([Op1|Code1=[Op2|Code2]], Block, Acc) 
+  when is_atom(Op1),is_atom(Op2) ->
+    Map = opcodes(),
+    N3 = maps:get(Op1, Map),
+    N4 = maps:get(Op2, Map),
+    if N3 < 8, N4 < 16 ->
+	    collect_blocks_(Code2, [{Op1,Op2}|Block], Acc);
+       true ->
+	    collect_blocks_(Code1, [Op1|Block], Acc)
+    end;
 collect_blocks_([Opcode|Code], Block, Acc) ->
     collect_blocks_(Code, [Opcode|Block], Acc);
 collect_blocks_([], Block, Acc) ->
@@ -429,6 +427,9 @@ disperse_blocks_([{'call.b',L}|Code], Acc) ->
 disperse_blocks_([{'call.w',L}|Code], Acc) ->
     <<B1,B0>> = <<L:16>>,
     disperse_blocks_(Code, [B0,B1,'call.w'|Acc]);
+disperse_blocks_([{'zbranch.h',L}|Code], Acc) ->
+    <<B0:3>> = <<L:3>>,
+    disperse_blocks_(Code, [{'zbranch.h',B0}|Acc]);
 disperse_blocks_([{'zbranch.b',L}|Code], Acc) ->
     <<B0>> = <<L:8>>,
     disperse_blocks_(Code, [B0,'zbranch.b'|Acc]);
@@ -455,10 +456,9 @@ encode_const(Code) ->
     encode_const_(Code,[]).
 
 encode_const_([{const,I}|Code],Acc) when is_integer(I) ->
-    if I =:= 0 ->
-	    encode_const_(Code, [0|Acc]);
-       I =:= 1 ->
-	    encode_const_(Code, [1|Acc]);
+    if I >= -8, I =< 7 ->
+	    <<H0:3>> = <<I:3>>,
+	    encode_const_(Code, [{'push.h',H0}|Acc]);
        I >= -16#80, I =< 16#7f ->
 	    <<B0>> = <<I:8>>,
 	    encode_const_(Code, [B0,'push.b'|Acc]);
@@ -477,18 +477,49 @@ encode_const_([],Acc) ->
     lists:reverse(Acc).
 
 %%
+%% Size of opcode
+%%
+opcode_length({'push.h',_}) -> 1;
+opcode_length({'push.b',_}) -> 2;
+opcode_length({'push.w',_}) -> 3;
+opcode_length({'push.l',_}) -> 4;
+opcode_length({'zbranch.h',_}) -> 1;
+opcode_length({'zbranch.b',_}) -> 2;
+opcode_length({'zbranch.w',_}) -> 3;
+opcode_length({'branch.b',_})  -> 2;
+opcode_length({'branch.w',_})  -> 3;
+opcode_length({'ibranch.b',Ls}) -> 1+1+length(Ls);
+opcode_length({'ibranch.w',Ls}) -> 1+2+2*length(Ls);
+opcode_length({Op3,Op4}) ->
+    Map = opcodes(),
+    N3 = maps:get(Op3, Map),
+    N4 = maps:get(Op4, Map),
+    if N3 < 8, N4 < 16 -> 1 end;
+opcode_length(Op) ->
+    Map = opcodes(),
+    N7 = maps:get(Op, Map),    
+    if N7 < 127-> 1 end.
+
+%%
 %% Encode all opcodes into bytes
 %%
 encode_opcodes(Code) ->
     encode_opcodes_(Code, [], opcodes()).
 
-encode_opcodes_([Opcode|Code], Acc, Map) ->
-    case maps:find(Opcode,Map) of
-	{ok,C} ->
-	    encode_opcodes_(Code,[C|Acc],Map);
-	error when is_integer(Opcode), Opcode >= 0, Opcode =< 255 ->
-	    encode_opcodes_(Code,[Opcode|Acc],Map)
-    end;
+encode_opcodes_([Op|Code], Acc, Map) when 
+      is_integer(Op), Op >= 0, Op =< 255 ->
+    encode_opcodes_(Code,[Op|Acc],Map);
+encode_opcodes_([{'push.h',I4}|Code], Acc, Map) ->
+    encode_opcodes_(Code,[?OPCODE2(?PUSH_H,I4)|Acc],Map);
+encode_opcodes_([{'zbranch.h',I4}|Code], Acc, Map) ->
+    encode_opcodes_(Code,[?OPCODE2(?ZBRAN_H,I4)|Acc],Map);
+encode_opcodes_([{Op3,Op4}|Code], Acc, Map) ->
+    N3 = maps:get(Op3,Map),
+    N4 = maps:get(Op4,Map),
+    encode_opcodes_(Code,[?OPCODE2(N3,N4)|Acc],Map);
+encode_opcodes_([Op|Code], Acc, Map) ->
+    N7 = maps:get(Op,Map),
+    encode_opcodes_(Code,[N7|Acc],Map);
 encode_opcodes_([], Acc, _Map) ->
     list_to_binary(lists:reverse(Acc)).
 
