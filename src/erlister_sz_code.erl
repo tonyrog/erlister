@@ -169,7 +169,7 @@ tlist(ID,[{T,_Ln}|Ts]) ->
 %% formula(SELF,in,Name,undefined) -> {input,fid(SELF,Name)};%
 % formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
 
-formula(_SELF,_Class,{const,true})    -> -1;
+formula(_SELF,_Class,{const,true})    -> 1;
 formula(_SELF,_Class,{const,false})   -> 0;
 formula(_SELF,_Class,{const,C})       -> C;
 formula(SELF,_Class,{in,ID,Type})     -> {input,fid(SELF,ID),Type};
@@ -178,7 +178,7 @@ formula(SELF,_Class,{out,ID,Type})    -> {output,fid(SELF,ID),Type};
 formula(SELF,_Class,{def,ID,_Type})   -> [{def,fid(SELF,ID)},'@'];
 formula(SELF,_Class,{state,ID})       -> [{state,mid(SELF,ID)},'@',
 					  {const,fid(SELF,ID)},'='];
-formula(SELF,_Class,{timeout,ID})     -> {timeout,fid(SELF,ID)};
+formula(SELF,_Class,{timeout,ID})     -> {timer_timeout,fid(SELF,ID)};
 formula(SELF,Class,{'&&',L,R}) ->
     Label = new_label(),
     [formula(SELF,Class,L), dup, {zbranch,Label},
@@ -216,8 +216,8 @@ formula(S,C,{'%',L,R}) -> [formula(S,C,L),formula(S,C,R),mod];
 formula(S,C,{'&',L,R}) -> [formula(S,C,L),formula(S,C,R),'and'];
 formula(S,C,{'|',L,R}) -> [formula(S,C,L),formula(S,C,R),'or'];
 formula(S,C,{'^',L,R}) -> [formula(S,C,L),formula(S,C,R),'xor'];
-formula(S,C,{'<<',L,R}) -> [formula(S,C,L),formula(S,C,R),lshift];
-formula(S,C,{'>>',L,R}) -> [formula(S,C,L),formula(S,C,R),arshift];
+formula(S,C,{'<<',L,R}) -> [formula(S,C,L),formula(S,C,R),'<<'];
+formula(S,C,{'>>',L,R}) -> [formula(S,C,L),formula(S,C,R),'>>a'];
 formula(S,C,{'-',F}) -> [formula(S,C,F),negate];
 formula(S,C,{'~',F}) -> [formula(S,C,F),invert];
 formula(S,C,{'!',F}) -> [formula(S,C,F),'not'].

@@ -2,16 +2,16 @@
 -define(__SZCOMP_HRL__, true).
 
 -define(OPCODE1(X), ((X) band 0x7f)).
--define(OPCODE2(X,Y), (16#80 bor (((X) band 7) bsl 4) bor ((Y) band 15))).
+-define(OPCODE2(A,B), (16#80 bor (((B) band 15) bsl 3) bor ((A) band 7))).
 
 %% op3 : first part of OPCODE2 also an OPCODE1
--define(NOP,         0).  %% nop: ( -- )
--define(PUSH_H,      1).  %% const: ( -- x ) either 4 or 8 bits
--define(ZBRAN_H,     2).  %% either 4 or 8 bits offset
--define(DUP,         3).  %% ( a -- a a )
--define(ROT,         4).  %% ( x1 x2 x3 -- x2 x3 x1 )
--define(OVER,        5).  %% over: ( x1 x2 -- x1 x2 x1 )
--define(DROP,        6).  %% drop: ( x1 -- )
+-define(ZBRAN_H,     1).  %% either 4 or 8 bits offset
+-define(PUSH_H,      2).  %% const: ( -- x ) either 4 or 8 bits
+-define(DUP,         2).  %% ( a -- a a )
+-define(ROT,         3).  %% ( x1 x2 x3 -- x2 x3 x1 )
+-define(OVER,        4).  %% over: ( x1 x2 -- x1 x2 x1 )
+-define(DROP,        5).  %% drop: ( x1 -- )
+-define(SWAP,        6).  %% ( a b -- b a )
 -define(SUB,         7).   %% ( x1 x2 -- (x1-x2) )
 
 %% op4 : second part of OPCODE2 also an OPCODE1
@@ -42,7 +42,7 @@
 -define(LT,          30).  %% ( a b -- (a < b) )
 -define(STORE,       31).  %% ( a i -- )
 -define(FETCH,       32).  %% ( i -- a )
--define(SWAP,        33).  %% ( a b -- b a )
+-define(NOP,         33).  %% nop: ( -- )
 -define(LTE,         34).  %% '-' '--' '0<'
 -define(ULTE,        35).  %% '-' '--' '0<'
 -define(RET,         36).  %% ( -- ) R: ( addr -- )
@@ -73,14 +73,17 @@
 -define(FAIL_MEMORY_OVERFLOW,   -7).
 
 %% SYSTEM CALLS
--define(SYS_PARAM_FETCH,   1).  %% ( i s -- v f )
--define(SYS_PARAM_STORE,   2).  %% ( v i s -- f )
--define(SYS_TIMER_STOP,    3).  %% ( i -- f )
--define(SYS_TIMER_START,   4).  %% ( i time -- f )
--define(SYS_TIMER_TIMEOUT, 5).  %% ( i -- f )
--define(SYS_TIMER_RUNNING, 6).  %% ( i -- f )
--define(SYS_INPUT_FETCH,   7).  %% ( i k -- v f )
--define(SYS_SELECT,        8).  %% ( tmask imask -- f )
+-define(SYS_PARAM_FETCH,   1).  %% ( i s -- n )
+-define(SYS_PARAM_STORE,   2).  %% ( v i s -- )
+-define(SYS_TIMER_INIT,    3).  %% ( i --  )
+-define(SYS_TIMER_START,   4).  %% ( i time --  )
+-define(SYS_TIMER_STOP,    5).  %% ( i --  )
+-define(SYS_TIMER_TIMEOUT, 6).  %% ( i -- f )
+-define(SYS_TIMER_RUNNING, 7).  %% ( i -- f )
+-define(SYS_INPUT_FETCH,   8).  %% ( i k -- n )
+-define(SYS_SELECT,        9).  %% ( tmask imask -- )
+-define(SYS_EMIT,         10).  %% ( c -- )
+-define(SYS_KEY,          11).  %% (   -- c )
 
 %% INPUT kind (k)
 -define(INPUT_BOOLEAN, 0).

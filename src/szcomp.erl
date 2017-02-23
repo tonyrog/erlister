@@ -471,6 +471,27 @@ encode_const_([{const,I}|Code],Acc) when is_integer(I) ->
        true ->
 	    erlang:error(integer_to_big)
     end;
+encode_const_([input_boolean|Code], Acc) ->
+    encode_const_([{const,?INPUT_BOOLEAN}|Code],Acc);
+encode_const_([input_analog|Code], Acc) ->
+    encode_const_([{const,?INPUT_ANALOG}|Code],Acc);
+encode_const_([input_encoder|Code], Acc) ->
+    encode_const_([{const,?INPUT_ENCODER}|Code],Acc);
+encode_const_([{sys, SysOp}|Code], Acc) ->
+    Sys = case SysOp of
+	      'param@' -> ?SYS_PARAM_FETCH;
+	      'param!' -> ?SYS_PARAM_STORE;
+	      timer_init -> ?SYS_TIMER_INIT;
+	      timer_start -> ?SYS_TIMER_START;
+	      timer_stop -> ?SYS_TIMER_STOP;
+	      timer_timeout -> ?SYS_TIMER_TIMEOUT;
+	      timer_running -> ?SYS_TIMER_RUNNING;
+	      'input@' -> ?SYS_INPUT_FETCH;
+	      select -> ?SYS_SELECT;
+	      emit -> ?SYS_EMIT;
+	      key -> ?SYS_KEY
+	  end,
+    encode_const_(Code, [Sys,?SYS_B|Acc]);
 encode_const_([C|Code],Acc) ->
     encode_const_(Code, [C|Acc]);
 encode_const_([],Acc) ->
@@ -490,6 +511,7 @@ opcode_length({'branch.b',_})  -> 2;
 opcode_length({'branch.w',_})  -> 3;
 opcode_length({'ibranch.b',Ls}) -> 1+1+length(Ls);
 opcode_length({'ibranch.w',Ls}) -> 1+2+2*length(Ls);
+opcode_length({'sys.b',_}) -> 2;
 opcode_length({Op3,Op4}) ->
     Map = opcodes(),
     N3 = maps:get(Op3, Map),
