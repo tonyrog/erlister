@@ -8,74 +8,79 @@
 -module(szcomp).
 
 -compile(export_all).
+-export([effect/1, minmax_depth/1]).
+-export([print_stack_effect/2]).
+-export([opcodes/0]).
 
 -include("szcomp.hrl").
 
 opcodes() ->
     #{ 
        %% op:3
-       'nop' => ?NOP,
-       'push.h' => ?PUSH_H,
        'zbranch.h' => ?ZBRAN_H,
+       'lit.h' => ?LIT_H,
        'dup' => ?DUP,
        'rot' => ?ROT,
        'over' => ?OVER,
        'drop' => ?DROP,
+       'swap' => ?SWAP,
        '-' => ?SUB,
        %% op:4
        '+' => ?ADD,
        '*' => ?MUL,
-       '=' => ?EQ,
        'and' => ?AND,
        'or' => ?OR,
        '0='  => ?ZEQ,
        '0<'  => ?ZLT,
        'not' => ?NOT,
+
        %% op:7
+       'u<'  => ?ULT,
+       'u<=' => ?ULTE,
+       'lshift'  => ?BSL,
+       'rshift'  => ?BSR,
+       'arshift'  => ?ASR,
        '/' => ?DIV,
        'mod' => ?MOD,
        'xor' => ?XOR,
        'negate' => ?NEG,
        'invert' => ?INV,
-       '<<'  => ?BSL,
-       '>>'  => ?BSR,
-       '>>a'  => ?ASR,
-       '1+'  => ?INC,
-       '1-'  => ?DEC,
-       'abs' => ?ABS,
-       'min' => ?MIN,
-       'max' => ?MAX,
-       'u<'  => ?ULT,
-       '<'   => ?LT,
        '!' => ?STORE,
        '@' => ?FETCH,
-       'swap' => ?SWAP,
-       '<='  => ?LTE,
-       'u<=' => ?ULTE,
+       'nop' => ?NOP,
        ';' => ?RET,
 
-       'push.b' => ?PUSH_B,
-       'push.w' => ?PUSH_W,
-       'push.l' => ?PUSH_L,
-
+       'literal.b' => ?LIT_B,
+       'literal.w' => ?LIT_W,
+       'literal.l' => ?LIT_L,
        'branch.b' => ?BRAN_B,
        'branch.w' => ?BRAN_W,
-
        'zbranch.b' => ?ZBRAN_B,
        'zbranch.w' => ?ZBRAN_W,
-
        'ibranch.b' => ?IBRAN_B,
        'ibranch.w' => ?IBRAN_W,
-
        'call.b' => ?CALL_B,
        'call.w' => ?CALL_W,
-       
        'sys.b' => ?SYS_B,
-
        'exit' => ?EXIT
      }.
 
-    
+%% not real opcodes, they are expanded like macros
+synthetic_opcodes() ->
+    #{
+       '1+'  => [{const,1},'+'],
+       '1-'  => [{const,1},'-'],
+       '<'   => ['-', '0<'],
+       '>'   => [swap, '-', '0<'],
+       '<='  => ['-', '1-', '0<'],
+       '>='  => [swap,'-','1-','0<'],
+       '='   => ['-', '0='],
+       'setbit' => [{const,1},swap,lshift,'or'],
+       'clrbit' => [{const,1},swap,lshift,invert,'and'],
+       'togglebit' => [{const,1},swap,lshift,'xor'],
+       'tstbit'    => [{const,1},swap,lshift,'and']
+     }.
+
 asm_file(File) ->
     {ok,Ls} = file:consult(File),
     [asm(L) || L <- Ls].
@@ -458,24 +463,24 @@ encode_const(Code) ->
 encode_const_([{const,I}|Code],Acc) when is_integer(I) ->
     if I >= -8, I =< 7 ->
 	    <<H0:3>> = <<I:3>>,
-	    encode_const_(Code, [{'push.h',H0}|Acc]);
+	    encode_const_(Code, [{'literal.h',H0}|Acc]);
        I >= -16#80, I =< 16#7f ->
 	    <<B0>> = <<I:8>>,
-	    encode_const_(Code, [B0,'push.b'|Acc]);
+	    encode_const_(Code, [B0,'literal.b'|Acc]);
        I >= -16#8000, I =< 16#7fff ->
 	    <<B1,B0>> = <<I:16>>,
-	    encode_const_(Code, [B0,B1,'push.w'|Acc]);
+	    encode_const_(Code, [B0,B1,'literal.w'|Acc]);
        I >= -16#80000000, I =< 16#7fffffff ->
 	    <<B3,B2,B1,B0>> = <<I:32>>,
-	    encode_const_(Code, [B0,B1,B2,B3,'push.w'|Acc]);
+	    encode_const_(Code, [B0,B1,B2,B3,'literal.w'|Acc]);
        true ->
 	    erlang:error(integer_to_big)
     end;
-encode_const_([input_boolean|Code], Acc) ->
+encode_const_([{const,boolean}|Code], Acc) ->
     encode_const_([{const,?INPUT_BOOLEAN}|Code],Acc);
-encode_const_([input_analog|Code], Acc) ->
+encode_const_([{const,analog}|Code], Acc) ->
     encode_const_([{const,?INPUT_ANALOG}|Code],Acc);
-encode_const_([input_encoder|Code], Acc) ->
+encode_const_([{const,encoder}|Code], Acc) ->
     encode_const_([{const,?INPUT_ENCODER}|Code],Acc);
 encode_const_([{sys, SysOp}|Code], Acc) ->
     Sys = case SysOp of
@@ -500,10 +505,10 @@ encode_const_([],Acc) ->
 %%
 %% Size of opcode
 %%
-opcode_length({'push.h',_}) -> 1;
-opcode_length({'push.b',_}) -> 2;
-opcode_length({'push.w',_}) -> 3;
-opcode_length({'push.l',_}) -> 4;
+opcode_length({'literal.h',_}) -> 1;
+opcode_length({'literal.b',_}) -> 2;
+opcode_length({'literal.w',_}) -> 3;
+opcode_length({'literal.l',_}) -> 4;
 opcode_length({'zbranch.h',_}) -> 1;
 opcode_length({'zbranch.b',_}) -> 2;
 opcode_length({'zbranch.w',_}) -> 3;
@@ -519,8 +524,8 @@ opcode_length({Op3,Op4}) ->
     if N3 < 8, N4 < 16 -> 1 end;
 opcode_length(Op) ->
     Map = opcodes(),
-    N7 = maps:get(Op, Map),    
-    if N7 < 127-> 1 end.
+    N7 = maps:get(Op, Map),
+    if N7 < 127 -> 1 end.
 
 %%
 %% Encode all opcodes into bytes
@@ -531,8 +536,8 @@ encode_opcodes(Code) ->
 encode_opcodes_([Op|Code], Acc, Map) when 
       is_integer(Op), Op >= 0, Op =< 255 ->
     encode_opcodes_(Code,[Op|Acc],Map);
-encode_opcodes_([{'push.h',I4}|Code], Acc, Map) ->
-    encode_opcodes_(Code,[?OPCODE2(?PUSH_H,I4)|Acc],Map);
+encode_opcodes_([{'literal.h',I4}|Code], Acc, Map) ->
+    encode_opcodes_(Code,[?OPCODE2(?LIT_H,I4)|Acc],Map);
 encode_opcodes_([{'zbranch.h',I4}|Code], Acc, Map) ->
     encode_opcodes_(Code,[?OPCODE2(?ZBRAN_H,I4)|Acc],Map);
 encode_opcodes_([{Op3,Op4}|Code], Acc, Map) ->
@@ -554,3 +559,147 @@ new_label() ->
 	    put(next_label, I+1),
 	    I
     end.
+
+effect_all() ->
+    Ls = 
+	[ begin Is=[A,B],
+		{Is,effect_(Is)}
+	  end || A <- [dup,rot,over,drop,swap,'-'],
+		 B <- [dup,rot,over,drop,swap,'-',
+		       '+','*','=','and','or','0=','0<','not']],
+    effect_filter(Ls).
+
+effect_filter(Ls) ->
+    effect_filter(Ls, sets:new()).
+
+effect_filter([{Is,{S,S}}|Tail], Set) ->
+    io:format("~w = id\n", [Is]),
+    effect_filter(Tail,Set);
+effect_filter([{Is,{S1,S2}}|Tail], Set) ->
+    case sets:is_element({S1,S2},Set) of
+	true ->
+	    io:format("~w ( multiple ) ", [Is]),
+	    print_stack_effect(S1,S2),
+	    effect_filter(Tail,Set);
+	false ->
+	    io:format("~w : ", [Is]),
+	    print_stack_effect(S1,S2),
+	    effect_filter(Tail,sets:add_element({S1,S2},Set))
+    end;
+effect_filter([],_) ->
+    ok.
+
+effect(Is) ->
+    {Stack,Stack2} = effect_(Is),
+    print_stack_effect(Stack, Stack2),
+    Stack2.
+
+print_stack_effect(Before,After) ->
+    io:format("( ~w -- ~w )\n", [lists:reverse(Before),
+				 lists:reverse(After)]).
+
+effect_(Is) ->
+    {N,_,_} = minmax_depth(Is),
+    Stack = generate_stack(-N),
+    Stack2 = exec(Is, Stack),
+    {Stack, Stack2}.
+
+
+generate_stack(N) ->
+    generate_stack($a,N,[]).
+    
+generate_stack(_C,0,Acc) ->
+    Acc;
+generate_stack(C, I,Acc) when I > 0 ->
+    generate_stack(C+1,I-1,[list_to_atom([C]) | Acc]).
+
+
+exec([I|Is],Stack) ->
+    exec(Is,exec_(I,Stack));
+exec([],Stack) ->
+    Stack.
+
+exec_(dup, [A|Xs])     -> [A,A|Xs];
+exec_(rot, [C,B,A|Xs]) -> [A,C,B|Xs];
+exec_(over, [B,A|Xs])  -> [A,B,A|Xs];
+exec_(drop, [_A|Xs])   -> Xs;
+exec_(swap, [B,A|Xs])  -> [A,B|Xs];
+exec_('-',[A,A|Xs])    -> [{const,0}|Xs];
+exec_('-',[B,A|Xs])    -> [{'-',A,B}|Xs];
+exec_('+',[B,A|Xs])    -> [{'+',A,B}|Xs];
+exec_('*',[B,A|Xs])    -> [{'*',A,B}|Xs];
+exec_('=',[A,A|Xs])    -> [{const,1}|Xs];
+exec_('=',[B,A|Xs])    -> [{'=',A,B}|Xs];
+exec_('and',[A,A|Xs])  -> [A|Xs];
+exec_('and',[B,A|Xs])  -> [{'and',A,B}|Xs];
+exec_('or',[A,A|Xs])   -> [A|Xs];
+exec_('or',[B,A|Xs])   -> [{'or',A,B}|Xs];
+exec_('0=',[A|Xs])     -> [{'0=',A}|Xs];
+exec_('0<',[A|Xs])     -> [{'0<',A}|Xs];
+exec_('not',[A|Xs])    -> [{'not',A}|Xs];
+exec_('/',[B,A|Xs])   -> [{'/',A,B}|Xs];
+exec_('mod',[B,A|Xs])   -> [{'mod',A,B}|Xs];
+exec_('xor',[A,A|Xs])   -> [{const,0}|Xs];
+exec_('xor',[B,A|Xs])   -> [{'xor',A,B}|Xs];
+exec_('negate',[A|Xs])    -> [{'negate',A}|Xs];
+exec_('invert',[A|Xs])    -> [{'invert',A}|Xs];
+exec_('<<',[B,A|Xs])    -> [{'<<',A,B}|Xs];
+exec_('>>',[B,A|Xs])    -> [{'>>',A,B}|Xs];
+exec_('>>a',[B,A|Xs])    -> [{'>>a',A,B}|Xs];
+exec_(nop, Xs)         -> Xs;
+exec_({const,C},Xs) -> [C|Xs].
+
+
+%% depth calculate stack effect depth
+%% depth(Instruction) -> {Min depth before,  Min depth after}
+%%
+minmax_depth(Is) ->
+    Min0 = 3*length(Is),
+    minmax_depth(Is, Min0, 0, 0).
+
+minmax_depth([I|Is], Min, Max, Level) ->
+    {Before,After} = min_depth_(I),
+    Effect = After - Before,
+    LevelBefore = Level - Before,
+    LevelAfter = Level - After,
+    Level1 = Level + Effect,
+    minmax_depth(Is, 
+		 erlang:min(Min,LevelBefore),
+		 erlang:max(Max,LevelAfter),
+		 Level1);
+minmax_depth([], Min, Max, Depth) ->
+    {Min,Max,Depth}.
+
+min_depth_(dup)   -> {1,2};
+min_depth_(rot)   -> {3,3};
+min_depth_(over)  -> {2,3};
+min_depth_(drop)  -> {1,0};
+min_depth_(swap)  -> {2,2};
+min_depth_('-')   -> {2,1};
+min_depth_('+')   -> {2,1};
+min_depth_('*')   -> {2,1};
+min_depth_('=')   -> {2,1};
+min_depth_('and') -> {2,1};
+min_depth_('or')  -> {2,1};
+min_depth_('0=')  -> {1,1};
+min_depth_('0<')  -> {1,1};
+min_depth_('not') -> {1,1};
+min_depth_('/')   -> {2,1};
+min_depth_('mod') -> {2,1};
+min_depth_('xor')  -> {2,1};
+min_depth_('negate') -> {1,1};
+min_depth_('invert') -> {1,1};
+min_depth_('<<')  -> {2,1};
+min_depth_('>>')  -> {2,1};
+min_depth_('>>a')  -> {2,1};
+min_depth_('1+') -> {1,1};
+min_depth_('1-') -> {1,1};
+min_depth_('u<')  -> {2,1};
+min_depth_('<')  -> {2,1};
+min_depth_('!')  -> {2,0};
+min_depth_('@')  -> {1,1};
+min_depth_('nop') -> {0,0};
+min_depth_('<=') -> {2,1};
+min_depth_('u<=') -> {2,1};
+min_depth_(';') -> {0,0};
+min_depth_({const,_C}) -> {0,1}.

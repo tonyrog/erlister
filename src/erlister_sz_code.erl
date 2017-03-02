@@ -47,18 +47,18 @@ declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
 final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      {label,final},
-     [ [[{timer_stop,id([M#machine.name,T])}] ||
+     [ [[{const,id([M#machine.name,T])},{sys,timer_stop}] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
-     [[{timer_stop,id([ID,T])}] || #clock{id=T} <- CLOCKS],
+     [[{const,id([ID,T])},{sys,timer_stop}] || #clock{id=T} <- CLOCKS],
      exit
     ].
 
 init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      {label,init},
-     [ [[{timer_init,id([M#machine.name,T])}] ||
+     [ [[{const,id([M#machine.name,T])},{sys,timer_init}] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
-     [[{timer_init,id([ID,T])}] || #clock{id=T} <- CLOCKS],
+     [[{const,id([ID,T]),{sys,timer_init}}] || #clock{id=T} <- CLOCKS],
      
      [if M#machine.states =:= [] -> [];
 	 true -> [{state,M#machine.name},
@@ -164,36 +164,30 @@ expand_trans([]) ->
 
 tlist(_ID,[]) -> [];
 tlist(ID,[{T,_Ln}|Ts]) ->
-    [{timer_start,id([ID,T])} | tlist(ID,Ts)].
+    [{const,id([ID,T])},{sys,timer_start} | tlist(ID,Ts)].
 
 %% formula(SELF,in,Name,undefined) -> {input,fid(SELF,Name)};%
 % formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
 
-formula(_SELF,_Class,{const,true})    -> 1;
-formula(_SELF,_Class,{const,false})   -> 0;
-formula(_SELF,_Class,{const,C})       -> C;
-formula(SELF,_Class,{in,ID,Type})     -> {input,fid(SELF,ID),Type};
-formula(SELF,_Class,{out1,ID,Type})   -> {output1,fid(SELF,ID),Type};
-formula(SELF,_Class,{out,ID,Type})    -> {output,fid(SELF,ID),Type};
+formula(_SELF,_Class,{const,true})    -> {const,1};
+formula(_SELF,_Class,{const,false})   -> {const,0};
+formula(_SELF,_Class,{const,C})       -> {const,C};
+formula(SELF,_Class,{in,ID,Type})     -> [{const,fid(SELF,ID)},{const,Type},{sys,'input@'}];
+formula(SELF,_Class,{out1,ID,Type})   -> [{const,fid(SELF,ID)},{const,Type},{sys,'output1@'}];
+formula(SELF,_Class,{out,ID,Type})    -> [{const,fid(SELF,ID)},{const,Type},{sys,'output!'}];
 formula(SELF,_Class,{def,ID,_Type})   -> [{def,fid(SELF,ID)},'@'];
 formula(SELF,_Class,{state,ID})       -> [{state,mid(SELF,ID)},'@',
 					  {const,fid(SELF,ID)},'='];
-formula(SELF,_Class,{timeout,ID})     -> {timer_timeout,fid(SELF,ID)};
+formula(SELF,_Class,{timeout,ID})     -> [{const,fid(SELF,ID)},{sys,timer_timeout}];
 formula(SELF,Class,{'&&',L,R}) ->
-    Label = new_label(),
-    [formula(SELF,Class,L), dup, {zbranch,Label},
-     drop, formula(SELF,Class,R),
-     {label,Label}];
+    [formula(SELF,Class,L), dup, 
+     {if, [drop, formula(SELF,Class,R)]}];
 formula(SELF,Class,{'||',L,R}) ->
-    Label = new_label(),
-    [formula(SELF,Class,L), dup, 'not', '0=', {zbranch,Label},
-     drop, formula(SELF,Class,R),
-     {label,Label}];
+    [formula(SELF,Class,L), dup, 'not',
+     {'if', [drop, formula(SELF,Class,R)]}];
 formula(SELF,Class,{'->',L,R}) ->
-    Label = new_label(),
-    [formula(SELF,Class,L), dup, '0=', {zbranch,Label},
-     drop, formula(SELF,Class,R),
-     {label,Label}];
+    [formula(SELF,Class,L), dup, '0=', 
+     {'if', [drop, formula(SELF,Class,R)]}];
 formula(S,C,{'<->',L,R}) ->
     [formula(S,C,L), formula(S,C,R), '='];
 formula(S,C,{'<',L,R}) ->
@@ -212,15 +206,45 @@ formula(S,C,{'+',L,R}) -> [formula(S,C,L),formula(S,C,R),'+'];
 formula(S,C,{'-',L,R}) -> [formula(S,C,L),formula(S,C,R),'-'];
 formula(S,C,{'*',L,R}) -> [formula(S,C,L),formula(S,C,R),'*'];
 formula(S,C,{'/',L,R}) -> [formula(S,C,L),formula(S,C,R),'/'];
-formula(S,C,{'%',L,R}) -> [formula(S,C,L),formula(S,C,R),mod];
+formula(S,C,{'%',L,R}) -> [formula(S,C,L),formula(S,C,R),'mod'];
 formula(S,C,{'&',L,R}) -> [formula(S,C,L),formula(S,C,R),'and'];
 formula(S,C,{'|',L,R}) -> [formula(S,C,L),formula(S,C,R),'or'];
 formula(S,C,{'^',L,R}) -> [formula(S,C,L),formula(S,C,R),'xor'];
-formula(S,C,{'<<',L,R}) -> [formula(S,C,L),formula(S,C,R),'<<'];
-formula(S,C,{'>>',L,R}) -> [formula(S,C,L),formula(S,C,R),'>>a'];
+formula(S,C,{'<<',L,R}) -> [formula(S,C,L),formula(S,C,R),lshift];
+formula(S,C,{'>>',L,R}) -> [formula(S,C,L),formula(S,C,R),arshift];
 formula(S,C,{'-',F}) -> [formula(S,C,F),negate];
 formula(S,C,{'~',F}) -> [formula(S,C,F),invert];
 formula(S,C,{'!',F}) -> [formula(S,C,F),'not'].
+
+
+%% calculate input mask for expression
+imask(_SELF,Acc,{const,_C})   -> Acc;
+imask(SELF,Acc,{in,ID,_Type})  -> ordsets:add_element(fid(SELF,ID),Acc);
+imask(_SELF,Acc,{out1,_ID,_Type}) -> Acc;
+imask(_SELF,Acc,{out,_ID,_Type})  -> Acc;
+imask(_SELF,Acc,{def,_ID,_Type}) -> Acc; %% FIXME: add(in(fid(SELF,ID)))
+imask(_SELF,Acc,{state,_ID})     -> Acc;
+imask(_SELF,Acc,{timeout,_ID})   -> Acc;
+imask(SELF,Acc,{Op,L,R}) when is_atom(Op) ->
+    Acc1 = imask(SELF,Acc,L),
+    imask(SELF,Acc1,R);
+imask(SELF,Acc,{Op,F}) when is_atom(Op) ->
+    imask(SELF,Acc,F).
+
+%% calculate timeout mask for expression
+tmask(_SELF,Acc,{const,_C})    -> Acc;
+tmask(_SELF,Acc,{in,_ID,_Type})  -> Acc;
+tmask(_SELF,Acc,{out1,_ID,_Type}) -> Acc;
+tmask(_SELF,Acc,{out,_ID,_Type}) -> Acc;
+tmask(_SELF,Acc,{def,_ID,_Type}) -> Acc;
+tmask(_SELF,Acc,{state,_ID})       -> Acc;
+tmask(SELF,Acc,{timeout,ID})     -> ordsets:add_element(fid(SELF,ID),Acc);
+tmask(SELF,Acc,{Op,L,R}) when is_atom(Op) ->
+    Acc1 = tmask(SELF,Acc,L),
+    tmask(SELF,Acc1,R);
+tmask(SELF,Acc,{Op,F}) when is_atom(Op) ->
+    tmask(SELF,Acc,F).
+
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.

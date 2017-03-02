@@ -5,8 +5,8 @@
 -define(OPCODE2(A,B), (16#80 bor (((B) band 15) bsl 3) bor ((A) band 7))).
 
 %% op3 : first part of OPCODE2 also an OPCODE1
--define(ZBRAN_H,     1).  %% either 4 or 8 bits offset
--define(PUSH_H,      2).  %% const: ( -- x ) either 4 or 8 bits
+-define(ZBRAN_H,     0).  %% either 4 or 8 bits offset
+-define(LIT_H,       1).  %% const: ( -- x ) either 4 or 8 bits
 -define(DUP,         2).  %% ( a -- a a )
 -define(ROT,         3).  %% ( x1 x2 x3 -- x2 x3 x1 )
 -define(OVER,        4).  %% over: ( x1 x2 -- x1 x2 x1 )
@@ -33,34 +33,27 @@
 -define(BSL,         21).  %% <<: ( a n -- (a << n) )
 -define(BSR,         22).  %% >>: ( a n -- (a >> n) )
 -define(ASR,         23).  %% >>a: ( a n -- (a >> n) )
--define(INC,         24).  %% 1+ : ( a -- (a+1) )
--define(DEC,         25).  %% 1- : ( a -- (a-1) )
--define(ABS,         26).  %% ( a -- |a| )
--define(MIN,         27).  %% ( a b -- min(a,b) )
--define(MAX,         28).  %% ( a b -- max(a,b) )
--define(ULT,         29).  %% ( a b -- (a < b) )
--define(LT,          30).  %% ( a b -- (a < b) )
--define(STORE,       31).  %% ( a i -- )
--define(FETCH,       32).  %% ( i -- a )
--define(NOP,         33).  %% nop: ( -- )
--define(LTE,         34).  %% '-' '--' '0<'
--define(ULTE,        35).  %% '-' '--' '0<'
--define(RET,         36).  %% ( -- ) R: ( addr -- )
--define(PUSH_W,      37).  %% ( -- w )
--define(PUSH_L,      38).  %% ( -- l )
--define(BRAN_B,      39).  %% ( -- )
--define(BRAN_W,      40).  %% ( -- )
--define(ZBRAN_W,     41).  %% ( cond -- )
--define(IBRAN_B,     42).  %% ( i -- )
--define(IBRAN_W,     43).  %% ( i -- )
--define(CALL_B,      44).  %% ( -- ) R: ( -- addr )
--define(CALL_W,      45).  %% ( -- ) R: ( -- addr )
--define(SYS_B,       46).  %% sys ( x1 .. xn -- xi .. xj )
+-define(ULT,         24).  %% ( a b -- (a < b) )
+-define(STORE,       25).  %% ( a i -- )
+-define(FETCH,       26).  %% ( i -- a )
+-define(NOP,         27).  %% nop: ( -- )
+-define(ULTE,        28).  %% '-' '--' '0<'
+-define(RET,         29).  %% ( -- ) R: ( addr -- )
+-define(LIT_W,       30).  %% ( -- w )
+-define(LIT_L,       31).  %% ( -- l )
+-define(BRAN_B,      32).  %% ( -- )
+-define(BRAN_W,      33).  %% ( -- )
+-define(ZBRAN_W,     34).  %% ( cond -- )
+-define(IBRAN_B,     35).  %% ( i -- )
+-define(IBRAN_W,     36).  %% ( i -- )
+-define(CALL_B,      37).  %% ( -- ) R: ( -- addr )
+-define(CALL_W,      38).  %% ( -- ) R: ( -- addr )
+-define(SYS_B,       39).  %% sys ( x1 .. xn -- xi .. xj )
 
--define(EXIT,        47).  %% ( -- )  - fixme
+-define(EXIT,        40).  %% ( -- )  - fixme
 
-%% when PUSH_H/ZBRAN_H is a op7 then it's the byte versions
--define(PUSH_B,        ?PUSH_H).
+%% when LIT_H/ZBRAN_H is a op7 then it's the byte versions
+-define(LIT_B,         ?LIT_H).
 -define(ZBRAN_B,       ?ZBRAN_H).
 
 %% Failure codes
