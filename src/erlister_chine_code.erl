@@ -1,11 +1,11 @@
 %%% @author Tony Rogvall <tony@rogvall.se>
 %%% @copyright (C) 2017, Tony Rogvall
 %%% @doc
-%%%    Generate erlister seazone code
+%%%    Generate erlister chine code
 %%% @end
 %%% Created :  16 Jan 2017 by Tony Rogvall <tony@rogvall.se>
 
--module(erlister_sz_code).
+-module(erlister_chine_code).
 
 -export([code/1]).
 
@@ -47,18 +47,18 @@ declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
 final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      {label,final},
-     [ [[{const,id([M#machine.name,T])},{sys,timer_stop}] ||
+     [ [[{const,id([M#machine.name,T])},timer_stop] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
-     [[{const,id([ID,T])},{sys,timer_stop}] || #clock{id=T} <- CLOCKS],
+     [[{const,id([ID,T])},timer_stop] || #clock{id=T} <- CLOCKS],
      exit
     ].
 
 init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      {label,init},
-     [ [[{const,id([M#machine.name,T])},{sys,timer_init}] ||
+     [ [[{const,id([M#machine.name,T])},timer_init] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
-     [[{const,id([ID,T]),{sys,timer_init}}] || #clock{id=T} <- CLOCKS],
+     [[{const,id([ID,T])},timer_init] || #clock{id=T} <- CLOCKS],
      
      [if M#machine.states =:= [] -> [];
 	 true -> [{state,M#machine.name},
@@ -164,7 +164,7 @@ expand_trans([]) ->
 
 tlist(_ID,[]) -> [];
 tlist(ID,[{T,_Ln}|Ts]) ->
-    [{const,id([ID,T])},{sys,timer_start} | tlist(ID,Ts)].
+    [{const,id([ID,T])},timer_start | tlist(ID,Ts)].
 
 %% formula(SELF,in,Name,undefined) -> {input,fid(SELF,Name)};%
 % formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
@@ -172,16 +172,16 @@ tlist(ID,[{T,_Ln}|Ts]) ->
 formula(_SELF,_Class,{const,true})    -> {const,1};
 formula(_SELF,_Class,{const,false})   -> {const,0};
 formula(_SELF,_Class,{const,C})       -> {const,C};
-formula(SELF,_Class,{in,ID,Type})     -> [{const,fid(SELF,ID)},{const,Type},{sys,'input@'}];
-formula(SELF,_Class,{out1,ID,Type})   -> [{const,fid(SELF,ID)},{const,Type},{sys,'output1@'}];
-formula(SELF,_Class,{out,ID,Type})    -> [{const,fid(SELF,ID)},{const,Type},{sys,'output!'}];
+formula(SELF,_Class,{in,ID,Type})     -> [{const,fid(SELF,ID)},{const,Type},'input@'];
+formula(SELF,_Class,{out1,ID,Type})   -> [{const,fid(SELF,ID)},{const,Type},'output1@'];
+formula(SELF,_Class,{out,ID,Type})    -> [{const,fid(SELF,ID)},{const,Type},'output!'];
 formula(SELF,_Class,{def,ID,_Type})   -> [{def,fid(SELF,ID)},'@'];
 formula(SELF,_Class,{state,ID})       -> [{state,mid(SELF,ID)},'@',
 					  {const,fid(SELF,ID)},'='];
-formula(SELF,_Class,{timeout,ID})     -> [{const,fid(SELF,ID)},{sys,timer_timeout}];
+formula(SELF,_Class,{timeout,ID})     -> [{const,fid(SELF,ID)},timer_timeout];
 formula(SELF,Class,{'&&',L,R}) ->
     [formula(SELF,Class,L), dup, 
-     {if, [drop, formula(SELF,Class,R)]}];
+     {'if', [drop, formula(SELF,Class,R)]}];
 formula(SELF,Class,{'||',L,R}) ->
     [formula(SELF,Class,L), dup, 'not',
      {'if', [drop, formula(SELF,Class,R)]}];
@@ -245,7 +245,6 @@ tmask(SELF,Acc,{Op,L,R}) when is_atom(Op) ->
 tmask(SELF,Acc,{Op,F}) when is_atom(Op) ->
     tmask(SELF,Acc,F).
 
-
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.
 
@@ -258,7 +257,6 @@ id([A|As]) -> to_string(A)++"_"++id(As).
 to_string(A) when is_atom(A) -> atom_to_list(A);
 to_string(A) when is_integer(A),A>=0 -> integer_to_list(A);
 to_string(A) when is_list(A) -> A.
-    
 
 new_label() ->
     L = case get(next_label) of
@@ -267,6 +265,3 @@ new_label() ->
 	end,
     put(next_label, L+1),
     L.
-
-    
-	    

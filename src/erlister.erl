@@ -87,8 +87,8 @@ do_emit(Props, Machine) ->
     Code =
 	case proplists:get_value(lang,Props,c) of
 	    c -> erlister_c_code:code(Machine1);
-	    erlang -> erlister_erl_code:code(Machine1);
-	    seazone -> erlister_sz_code:code(Machine1)
+	    erl -> erlister_erl_code:code(Machine1);
+	    chine -> erlister_chine_code:code(Machine1)
 	end,
     case proplists:get_value(output, Props) of
 	undefined ->
