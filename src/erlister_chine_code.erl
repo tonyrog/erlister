@@ -13,7 +13,7 @@
 
 code(M) ->
     Code = code_(M),
-    FlatCode = lists:flatten(Code),
+    FlatCode = code_flatten(Code),
     io_lib:format("~p\n", [FlatCode]).
 
 code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
@@ -76,14 +76,22 @@ init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
 main(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
     [
      {label, main},
-     [ [{def,id([ID,Name])},formula(ID,def,Expr),'!'] ||
+     [ begin 
+	   put({def,fid(ID,Name)},Expr),
+	   [{def,id([ID,Name])},formula(ID,def,Expr),'!'] 
+       end ||
 	 #var{id=Name,expr=Expr} <- DEF,Expr =/= undefined ],
      [ begin
 	   Mid = M#machine.name,
-	   [ [[{def,id([Mid,Name])},formula(ID,in,Pred),'!'] || 
+	   [ [ begin 
+		   [{def,id([Mid,Name])},formula(ID,in,Pred),'!'] 
+	       end || 
 		 #var{id=Name,expr=Pred} <- M#machine.in,Pred =/= undefined],
-	     [[{def,id([Mid,Name])},formula(ID,def,Sat),'!'] || 
-		 #var{id=Name,expr=Sat} <- M#machine.def,Sat =/= undefined],
+	     [begin
+		  put({def,fid(Mid,Name)},Expr),
+		  [{def,id([Mid,Name])},formula(ID,def,Expr),'!']
+	      end || 
+		 #var{id=Name,expr=Expr} <- M#machine.def,Expr =/= undefined],
 	     code_trans(Mid, M#machine.trans),
 	     [ [{output,id([Mid,Name])},
 		formula(Mid,out,Sat),'!'] || 
@@ -104,23 +112,39 @@ code_trans(ID,TRs) ->
     Fs = [id([ID,F,1]) || {F,_} <- GroupTrans],
     [{state,ID},'@',
      {ibranch,Fs},
-     exit, %% FIME: bad branch
-     [[
-       [[{label,id([ID,From,I])},
-	 formula(ID,trans,Cond),
-	 {zbranch,id([ID,From,I+1])},
-	 {state,ID},{const,id([ID,To])},'!',
-	 tlist(ID,Start),
-	 %% FIXME: add actions,
-	 {branch,id([ID,"out"])}]
-	|| {{Cond,To,Start},I} <-
-	       lists:zip(FromGroup,lists:seq(1,length(FromGroup)))],
-       {label,id([ID,From,length(FromGroup)+1])}
-       %% FIXME: setup input/timer mask
-       %% leave
-      ]
-      || {From,FromGroup} <- GroupTrans],
-     {label,id([ID,"out"])}].
+     exit, %% FIME: bad branch/fail ?
+     code_from_group(ID, GroupTrans)].
+
+code_from_group(ID, [{From,FromGroup}|GroupTrans]) ->
+    Set = {ordsets:new(),ordsets:new()},
+    [ code_to_group(ID, From, 1, Set, [], FromGroup) | 
+      code_from_group(ID,GroupTrans)];
+code_from_group(ID, []) ->
+    [{label,id([ID,"out"])}].
+
+code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start} | ToGroup]) ->
+    Set1 = select(ID,Set,Cond),
+    Acc1 = [[{label,id([ID,From,I])},
+	     formula(ID,trans,Cond),
+	     {zbranch,id([ID,From,I+1])},
+	     {state,ID},{const,id([ID,To])},'!',
+	     tlist(ID,Start),
+	     %% FIXME: add actions,
+	     {branch,id([ID,"out"])}] | Acc],
+    code_to_group(ID, From, I+1, Set1, Acc1, ToGroup);
+code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
+    %% When all transitions fails then we end up here, here we have
+    %% computed Set = {ISet,TSet} sets of inputs and timers that can
+    %% effect the state machine. issue select statements that will 
+    %% have the effect that the state machine is executed when either
+    %% events trigger
+    Acc1 = [[{label,id([ID,From,N])},
+	     [[{const,id([ID,I])},select_input] || I <- ordsets:to_list(ISet)],
+	     [[{const,id([ID,T])},select_timer] || T <- ordsets:to_list(TSet)],
+	     yield,
+	     {branch,main}
+	    ] | Acc],
+    lists:reverse(Acc1).
      
 %% sort items according to the order of Keys
 sort_by_keys(Items,Pos,Keys) ->
@@ -172,15 +196,22 @@ tlist(ID,[{T,_Ln}|Ts]) ->
 formula(_SELF,_Class,{const,true})    -> {const,1};
 formula(_SELF,_Class,{const,false})   -> {const,0};
 formula(_SELF,_Class,{const,C})       -> {const,C};
-formula(SELF,_Class,{in,ID,Type})     -> [{const,fid(SELF,ID)},{const,Type},'input@'];
-formula(SELF,_Class,{out1,ID,Type})   -> [{const,fid(SELF,ID)},{const,Type},'output1@'];
-formula(SELF,_Class,{out,ID,Type})    -> [{const,fid(SELF,ID)},{const,Type},'output!'];
-formula(SELF,_Class,{def,ID,_Type})   -> [{def,fid(SELF,ID)},'@'];
-formula(SELF,_Class,{state,ID})       -> [{state,mid(SELF,ID)},'@',
-					  {const,fid(SELF,ID)},'='];
-formula(SELF,_Class,{timeout,ID})     -> [{const,fid(SELF,ID)},timer_timeout];
+formula(SELF,_Class,{in,ID,Type})     -> 
+    [{const,fid(SELF,ID)},{const,Type},'input@'];
+formula(SELF,_Class,{param,ID,_Index,_Type})  ->
+    [{const,fid(SELF,ID)},'param@'];
+formula(SELF,_Class,{out1,ID,Type})   ->
+    [{const,fid(SELF,ID)},{const,Type},'output1@'];
+formula(SELF,_Class,{out,ID,Type})    ->
+    [{const,fid(SELF,ID)},{const,Type},'output!'];
+formula(SELF,_Class,{def,ID,_Type})   ->
+    [{def,fid(SELF,ID)},'@'];
+formula(SELF,_Class,{state,ID})       ->
+    [{state,mid(SELF,ID)},'@',{const,fid(SELF,ID)},'='];
+formula(SELF,_Class,{timeout,ID})     ->
+    [{const,fid(SELF,ID)},timer_timeout];
 formula(SELF,Class,{'&&',L,R}) ->
-    [formula(SELF,Class,L), dup, 
+    [formula(SELF,Class,L), dup,
      {'if', [drop, formula(SELF,Class,R)]}];
 formula(SELF,Class,{'||',L,R}) ->
     [formula(SELF,Class,L), dup, 'not',
@@ -217,33 +248,26 @@ formula(S,C,{'~',F}) -> [formula(S,C,F),invert];
 formula(S,C,{'!',F}) -> [formula(S,C,F),'not'].
 
 
-%% calculate input mask for expression
-imask(_SELF,Acc,{const,_C})   -> Acc;
-imask(SELF,Acc,{in,ID,_Type})  -> ordsets:add_element(fid(SELF,ID),Acc);
-imask(_SELF,Acc,{out1,_ID,_Type}) -> Acc;
-imask(_SELF,Acc,{out,_ID,_Type})  -> Acc;
-imask(_SELF,Acc,{def,_ID,_Type}) -> Acc; %% FIXME: add(in(fid(SELF,ID)))
-imask(_SELF,Acc,{state,_ID})     -> Acc;
-imask(_SELF,Acc,{timeout,_ID})   -> Acc;
-imask(SELF,Acc,{Op,L,R}) when is_atom(Op) ->
-    Acc1 = imask(SELF,Acc,L),
-    imask(SELF,Acc1,R);
-imask(SELF,Acc,{Op,F}) when is_atom(Op) ->
-    imask(SELF,Acc,F).
+%% calculate selection set for inputs and timers
+select(_SELF,Set,{const,_C})   -> Set;
+select(SELF,{ISet,TSet},{in,ID,_Type})  -> 
+    {ordsets:add_element(fid(SELF,ID),ISet),TSet};
+select(_SELF,Set,{out1,_ID,_Type}) -> Set;
+select(_SELF,Set,{out,_ID,_Type})  -> Set;
+select(_SELF,Set,{param,_ID,_Index,_Type})  -> Set;
+select(SELF,Set,{def,ID,_Type}) ->
+    case get({def,fid(SELF,ID)}) of
+	undefined -> Set;
+	Expr -> select(SELF,Set,Expr)
+    end;
+select(_SELF,Set,{state,_ID})     -> Set;
+select(SELF,{ISet,TSet},{timeout,ID})   ->
+    {ISet,ordsets:add_element(fid(SELF,ID),TSet)};
+select(SELF,Set,{Op,L,R}) when is_atom(Op) ->
+    select(SELF,select(SELF,Set,L),R);
+select(SELF,Set,{Op,F}) when is_atom(Op) ->
+    select(SELF,Set,F).
 
-%% calculate timeout mask for expression
-tmask(_SELF,Acc,{const,_C})    -> Acc;
-tmask(_SELF,Acc,{in,_ID,_Type})  -> Acc;
-tmask(_SELF,Acc,{out1,_ID,_Type}) -> Acc;
-tmask(_SELF,Acc,{out,_ID,_Type}) -> Acc;
-tmask(_SELF,Acc,{def,_ID,_Type}) -> Acc;
-tmask(_SELF,Acc,{state,_ID})       -> Acc;
-tmask(SELF,Acc,{timeout,ID})     -> ordsets:add_element(fid(SELF,ID),Acc);
-tmask(SELF,Acc,{Op,L,R}) when is_atom(Op) ->
-    Acc1 = tmask(SELF,Acc,L),
-    tmask(SELF,Acc1,R);
-tmask(SELF,Acc,{Op,F}) when is_atom(Op) ->
-    tmask(SELF,Acc,F).
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.
@@ -258,10 +282,22 @@ to_string(A) when is_atom(A) -> atom_to_list(A);
 to_string(A) when is_integer(A),A>=0 -> integer_to_list(A);
 to_string(A) when is_list(A) -> A.
 
-new_label() ->
-    L = case get(next_label) of
-	    undefined -> 1;
-	    L0 -> L0+1
-	end,
-    put(next_label, L+1),
-    L.
+code_flatten(List) ->
+    code_flatten_(lists:flatten(List)).
+
+code_flatten_([{'if',Then}|Code]) ->
+    [{'if',code_flatten(Then)} | code_flatten_(Code)];
+code_flatten_([{'if',Then,Else}|Code]) ->
+    [{'if',code_flatten(Then),code_flatten(Else)} | code_flatten_(Code)];
+code_flatten_([Op|Code]) ->
+    [Op | code_flatten(Code)];
+code_flatten_([]) ->
+    [].
+
+
+
+
+
+
+
+

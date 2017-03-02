@@ -10,6 +10,7 @@ Nonterminals
 	submachine_defs
 	submachine_def
 	in_def in_list
+        param_def param_list param_spec
 	def_def def_list
 	out_def out_list
         clocks_def clocks_list clock
@@ -34,8 +35,8 @@ Terminals
 	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-'
         '<=' '>=' '<' '>' '==' '!='
         '+' '*' '/' '%'
-	'machine' 'in' 'def' 'out' 'clocks' 'states' 'trans' 'start' 'timeout'
-	'submachines' 'submachine' identifier
+	'machine' 'in' 'param' 'def' 'out' 'clocks' 'states' 'trans' 'start' 
+        'timeout' 'submachines' 'submachine' identifier
         flonum hexnum octnum binnum decnum
         true false
         boolean unsigned8 unsigned16 unsigned32
@@ -93,10 +94,19 @@ submachine_def ->
 misc_defs -> misc_def : '$1'.
 misc_defs -> misc_defs misc_def : '$1'++'$2'.
 
-misc_def -> in_def  : ['$1'].
-misc_def -> def_def : ['$1'].
-misc_def -> out_def : ['$1'].
+misc_def -> in_def    : ['$1'].
+misc_def -> param_def : ['$1'].
+misc_def -> def_def   : ['$1'].
+misc_def -> out_def   : ['$1'].
 misc_def -> clocks_def : ['$1'].
+
+param_def -> type 'param' param_list ';' : {param,'$1','$3'}.
+
+param_list -> param_spec : ['$1'].
+param_list -> param_list ',' param_spec : '$1' ++ ['$3'].
+
+param_spec -> identifier : {'$1',default}.
+param_spec -> identifier '=' number : {'$1','$3'}.
 
 in_def -> type 'in' in_list ';' : {in,'$1','$3'}.
 

@@ -36,6 +36,7 @@
 	  name :: string(),   %% name of machine
 	  line :: integer(),   %% source line where defined
 	  in = [] :: [#var{}],     %% in declarations
+	  param = [] :: [#var{}],  %% param declarations
 	  def = [] :: [#var{}],    %% def declarations
 	  out = [] :: [#var{}],    %% out declarations
 	  clocks, %% clocks declarations

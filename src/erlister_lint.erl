@@ -12,11 +12,17 @@
 
 -include("../include/erlister.hrl").
 
+machine(M) ->
+    %% FIXME: we need to specify parameter definitions better,
+    %% this is a test
+    co_objdef:start_link(),
+    co_objdef:load(pdb),
+    machine_(M).
 
-machine([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
+machine_([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     Sym = maps:new(),
     Es0 = [],
-    {IN1,DEF1,OUT1,CLOCK1,Sym1,Es1} = lint_misc_0(Misc,[],[],[],[],Sym,Es0),
+    {IN1,PAR1,DEF1,OUT1,CLOCK1,Sym1,Es1} = lint_misc_0(Misc,[],[],[],[],[],Sym,Es0),
     {SUBMACHINES,Es2} = lint_submachines(Ms,[],Es1),
     {MACHINES0,Es3} = lint_submachine_list_0(Machines,[],SUBMACHINES,Es2),
     %% remove clocks?
@@ -24,23 +30,25 @@ machine([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) ->
     {MACHINES1,Es4} = lint_submachine_list(MACHINES0,[],Sym2,SUBMACHINES,Es3),
 
     {IN2,Es5} = lint_in(IN1,[],Sym2,ID,[],Es4),
-    {DEF2,Es6} = lint_def(DEF1,[],Sym2,Es5),
+    {PAR2,Es51} = lint_param(PAR1,[],Sym2,Es5),
+    {DEF2,Es6} = lint_def(DEF1,[],Sym2,Es51),
     {CLOCK2,Es7} = lint_clock(CLOCK1,[],Sym2,Es6),
     %% Fixme: remove global in variables?
     {OUT2,Es8} = lint_out(OUT1,[],Sym2,true,Es7),
-    {#machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+    {#machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,clocks=CLOCK2,
 	      submachines=SUBMACHINES,machines=MACHINES1},Es8};
-machine([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
+machine_([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
     Sym = maps:new(),
     {STATES1,Sym1,Es1} = lint_states(States,[],Sym,[]),
-    {IN1,DEF1,OUT1,CLOCK1,Sym2,Es2} = lint_misc_0(Misc,[],[],[],[],Sym1,Es1),
+    {IN1,PAR1,DEF1,OUT1,CLOCK1,Sym2,Es2} = lint_misc_0(Misc,[],[],[],[],[],Sym1,Es1),
     {IN2,Es3} = lint_in(IN1,[],Sym2,ID,[],Es2),
-    {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es3),
+    {PAR2,Es31} = lint_param(PAR1,[],Sym2,Es3),
+    {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es31),
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
     {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
     %% FIXME: check that all state has rules
     {TRANS1,Es7} = lint_trans(Trans,[],Sym2,Es6),
-    {#machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+    {#machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,clocks=CLOCK2,
 	      states=STATES1,trans=TRANS1},Es7}.
 
 %% First scan of submachines, check unique submachine name,
@@ -57,8 +65,8 @@ lint_submachine_list_0([{submachine,Ln,{identifier,_Ln,ID},Misc,
 	  end,
     Sym = maps:new(),
     {STATES1,Sym1,Es2} = lint_states(States,[],Sym,Es1),
-    {IN1,DEF1,OUT1,CLOCKS1,Sym2,Es3} = lint_misc_0(Misc,[],[],[],[],Sym1,Es2),
-    M = {submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCKS1,STATES1,Trans,Sym2},
+    {IN1,PAR1,DEF1,OUT1,CLOCKS1,Sym2,Es3} = lint_misc_0(Misc,[],[],[],[],[],Sym1,Es2),
+    M = {submachine0,Ln,ID,IN1,PAR1,DEF1,OUT1,CLOCKS1,STATES1,Trans,Sym2},
     lint_submachine_list_0(SubList,[M|Acc],SUBMACHINES,Es3);
 lint_submachine_list_0([],Acc,_SUBMACHINES,Es) ->
     {Acc,Es}.
@@ -66,7 +74,7 @@ lint_submachine_list_0([],Acc,_SUBMACHINES,Es) ->
 %% For each submachine export,
 %% output and state as ID.outi and ID.state1
 
-export_submachines([{submachine0,_Ln,ID,_IN,_DEF,OUT,_CLOCKS,
+export_submachines([{submachine0,_Ln,ID,_IN,_PAR,_DEF,OUT,_CLOCKS,
 		     STATES,_Trans,_Sym}|Ms],Sym) ->
     Sym1 = lists:foldl(
 	     fun(V=#var{id=Out},Si) -> 
@@ -80,17 +88,19 @@ export_submachines([{submachine0,_Ln,ID,_IN,_DEF,OUT,_CLOCKS,
 export_submachines([],Sym) ->
     Sym.
 
-lint_submachine_list([{submachine0,Ln,ID,IN1,DEF1,OUT1,CLOCK1,
+lint_submachine_list([{submachine0,Ln,ID,IN1,PAR1,DEF1,OUT1,CLOCK1,
 		       STATE,Trans,Sym0}|Ms],Acc,Sym,SUBMACHINES,Es) ->
     %% merge "global" symbols with locals, should remove self! maybe ok?
     Sym1 = maps:merge(Sym0,Sym),
     {IN2,Es1} = lint_in(IN1,[],Sym1,ID,SUBMACHINES,Es),
-    {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es1),
+    {PAR2,Es11} = lint_param(PAR1,[],Sym1,Es1),
+    {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es11),
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
     {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
     %% FIXME: check that all state has rules
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
-    M = #machine{line=Ln,name=ID,in=IN2,def=DEF2,out=OUT2,clocks=CLOCK2,
+    M = #machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,
+		 clocks=CLOCK2,
 		 states=STATE,trans=TRANS1},
     lint_submachine_list(Ms,[M|Acc],Sym,SUBMACHINES,Es5);
 lint_submachine_list([],Acc,_Sym,_SUBMACHINES,Es) ->
@@ -122,21 +132,23 @@ lint_states([],Acc,Sym,Es) ->
     {lists:reverse(Acc),Sym,Es}.
 
 %% lint_misc0, collect declaration and check uniqness
-lint_misc_0([{in,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN++[{Type,X}||X<-Xs],DEF,OUT,CLOCK,Sym,Es);
-lint_misc_0([{def,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN,DEF++[{Type,X}||X<-Xs],OUT,CLOCK,Sym,Es);
-lint_misc_0([{out,Type,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN,DEF,OUT++[{Type,X}||X<-Xs],CLOCK,Sym,Es);
-lint_misc_0([{clocks,Xs}|Ms],IN,DEF,OUT,CLOCK,Sym,Es) ->
-    lint_misc_0(Ms,IN,DEF,OUT,CLOCK++Xs,Sym,Es);
-lint_misc_0([],IN,DEF,OUT,CLOCK,Sym,Es) ->
+lint_misc_0([{in,Type,Xs}|Ms],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN++[{Type,X}||X<-Xs],PAR,DEF,OUT,CLOCK,Sym,Es);
+lint_misc_0([{param,Type,Xs}|Ms],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,PAR++[{Type,X}||X<-Xs],DEF,OUT,CLOCK,Sym,Es);
+lint_misc_0([{def,Type,Xs}|Ms],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,PAR,DEF++[{Type,X}||X<-Xs],OUT,CLOCK,Sym,Es);
+lint_misc_0([{out,Type,Xs}|Ms],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,PAR,DEF,OUT++[{Type,X}||X<-Xs],CLOCK,Sym,Es);
+lint_misc_0([{clocks,Xs}|Ms],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
+    lint_misc_0(Ms,IN,PAR,DEF,OUT,CLOCK++Xs,Sym,Es);
+lint_misc_0([],IN,PAR,DEF,OUT,CLOCK,Sym,Es) ->
     {IN1,Sym1,Es1} = lint_in_0(IN,[],Sym,Es),
-    {DEF1,Sym2,Es2} = lint_def_0(DEF,[],Sym1,Es1),
+    {PAR1,Sym11,Es11} = lint_param_0(PAR,[],Sym1,Es1),
+    {DEF1,Sym2,Es2} = lint_def_0(DEF,[],Sym11,Es11),
     {CLOCK1,Sym3,Es3} = lint_clock_0(CLOCK,[],Sym2,Es2),
     {OUT1,Sym4,Es4} = lint_out_0(OUT,[],Sym3,Es3),
-    {IN1,DEF1,OUT1,CLOCK1,Sym4,Es4}.
-
+    {IN1,PAR1,DEF1,OUT1,CLOCK1,Sym4,Es4}.
 
 lint_in_0([{Type,{identifier,Ln,ID}}|Xs],Acc,Sym,Es) ->
     V = #var{id=ID,line=Ln,type=Type,class=in},
@@ -159,6 +171,35 @@ lint_in_0([{Type,{'=',_Ln,{identifier,Ln,ID},Expr}}|Xs],Acc,Sym,Es) ->
 	    lint_in_0(Xs,[V|Acc],Sym1,Es)
     end;
 lint_in_0([],Acc,Sym,Es) ->
+    {Acc,Sym,Es}.
+
+
+lint_param_0([{Type,{{identifier,Ln,ID},Num}}|Xs],Acc,Sym,Es) ->
+    V = #var{id=ID,line=Ln,type=Type,class=param,expr=Num},
+    case maps:find(ID,Sym) of
+	{ok,_} ->
+	    E = {Ln,?MODULE,[ID, " is already defined"]},
+	    lint_param_0(Xs,[V|Acc],Sym,[E|Es]);
+	error when Num =:= default ->
+	    try co_objdef:lookup_object({index,list_to_atom(ID)}) of
+		{Index,_,_} ->
+		    V1 = V#var { expr=Index },
+		    Sym1 = maps:put(ID,V1,Sym),
+		    lint_param_0(Xs,[V1|Acc],Sym1,Es)
+	    catch
+		exit:_ ->
+		    E = {Ln,?MODULE,
+			 ["index for parameter ", ID, " not defined "]},
+		    Sym1 = maps:put(ID,V,Sym),
+		    lint_param_0(Xs,[V|Acc],Sym1,[E|Es])
+	    end;
+	error ->
+	    Index = get_number(Num),
+	    V1 = V#var { expr=Index },
+	    Sym1 = maps:put(ID,V1,Sym),
+	    lint_param_0(Xs,[V1|Acc],Sym1,Es)
+    end;
+lint_param_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
 %% a list of {ID,Ln,Sat} where Sat is parse tree
@@ -228,7 +269,13 @@ lint_in([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
 lint_in([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
-%% Check def
+%% Check param
+lint_param([V=#var{id=_ID,line=_Ln,expr=_Expr}|Xs],Acc,Sym,Es) ->
+    lint_param(Xs,[V|Acc],Sym,Es);
+lint_param([],Acc,_Sym,Es) ->
+    {Acc,Es}.
+
+%% Lint param
 lint_def([V=#var{expr=Expr}|Xs],Acc,Sym,Es) ->
     {Expr1,Es1} = lint_dsat(Expr,V#var.type,Sym,Es),
     lint_def(Xs,[V#var{expr=Expr1}|Acc],Sym,Es1);
@@ -384,6 +431,8 @@ lint_in_def_state_variable_(ID,Ln,Sym,Es) ->
     case maps:find(ID, Sym) of
 	{ok,#var{class=in,type=Type}} -> {{in,ID,Type},Es};
 	{ok,#var{class=def,type=Type}} -> {{def,ID,Type},Es};
+	{ok,#var{class=param,type=Type,expr=Index}} -> 
+	    {{param,ID,Index,Type},Es};
 	{ok,#state{}} -> {{state,ID},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID,
@@ -395,9 +444,11 @@ lint_in_def_variable_(ID,Ln,Sym,Es) ->
     case maps:find(ID, Sym) of
 	{ok,#var{class=in,type=Type}} -> {{in,ID,Type},Es};
 	{ok,#var{class=def,type=Type}} -> {{def,ID,Type},Es};
+	{ok,#var{class=param,expr=Index,type=Type}} -> 
+	    {{param,ID,Index,Type},Es};
 	_ ->
 	    E = {Ln,?MODULE,["variable ", ID, 
-			     " must be in or def parameter"]},
+			     " must be in, param or def parameter"]},
 	    {{in,ID,boolean},[E|Es]}
     end.
 

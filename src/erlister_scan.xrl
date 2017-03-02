@@ -15,6 +15,7 @@ Rules.
 
 machine		: {token,{machine,TokenLine}}.
 in		: {token,{in,TokenLine}}.
+param           : {token,{param,TokenLine}}.
 def		: {token,{def,TokenLine}}.
 out		: {token,{out,TokenLine}}.
 clocks		: {token,{clocks,TokenLine}}.
