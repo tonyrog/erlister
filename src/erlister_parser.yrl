@@ -32,7 +32,7 @@ Nonterminals
 Terminals
 	'&&' '||' '!' '->' '<->' 'ALL' 'SOME'
         '&' '^' '|' '~' '<<' '>>'
-	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-'
+	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-' '?'
         '<=' '>=' '<' '>' '==' '!='
         '+' '*' '/' '%'
 	'machine' 'in' 'param' 'def' 'out' 'clocks' 'states' 'trans' 'start' 
@@ -45,6 +45,7 @@ Terminals
 
 Left 200  '->'.
 Left 250  '<->'.
+Left 260  '?' ':'.
 Left 300  '||'.
 Left 400  '&&'.
 Left 410  '|'.
@@ -226,6 +227,7 @@ arith -> arith '|' arith : {'|',line('$1'),'$1','$3'}.
 arith -> arith '^' arith : {'^',line('$1'),'$1','$3'}.
 arith -> arith '<<' arith : {'<<',line('$1'),'$1','$3'}.
 arith -> arith '>>' arith : {'>>',line('$1'),'$1','$3'}.
+arith -> formula '?' formula ':' formula : {'?',line('$1'),'$1','$3','$5'}.
 
 number -> flonum : '$1'.
 number -> hexnum : '$1'.

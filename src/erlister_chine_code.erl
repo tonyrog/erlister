@@ -193,9 +193,9 @@ tlist(ID,[{T,_Ln}|Ts]) ->
 %% formula(SELF,in,Name,undefined) -> {input,fid(SELF,Name)};%
 % formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
 
-formula(_SELF,_Class,{const,true})    -> {const,1};
-formula(_SELF,_Class,{const,false})   -> {const,0};
-formula(_SELF,_Class,{const,C})       -> {const,C};
+formula(_SELF,_Class,{const,true})    -> [{const,1}];
+formula(_SELF,_Class,{const,false})   -> [{const,0}];
+formula(_SELF,_Class,{const,C})       -> [{const,C}];
 formula(SELF,_Class,{in,ID,Type})     -> 
     [{const,fid(SELF,ID)},{const,Type},'input@'];
 formula(SELF,_Class,{param,ID,_Index,_Type})  ->
@@ -210,6 +210,8 @@ formula(SELF,_Class,{state,ID})       ->
     [{state,mid(SELF,ID)},'@',{const,fid(SELF,ID)},'='];
 formula(SELF,_Class,{timeout,ID})     ->
     [{const,fid(SELF,ID)},timer_timeout];
+formula(SELF,Class,{'?',C,T,E}) ->
+    [formula(SELF,Class,C),{'if',formula(SELF,Class,T),formula(SELF,Class,E)}];
 formula(SELF,Class,{'&&',L,R}) ->
     [formula(SELF,Class,L), dup,
      {'if', [drop, formula(SELF,Class,R)]}];

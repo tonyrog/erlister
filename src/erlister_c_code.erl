@@ -245,6 +245,9 @@ formula(SELF,_Class,{def,ID,_Type})    -> fid(SELF,ID);
 formula(SELF,_Class,{state,ID}) ->  ["(ctx->st_",mid(SELF,ID)," == ",fid(SELF,ID),")"];
 formula(SELF,_Class,{timeout,ID}) ->
     ["timer_timeout(&ctx->clk_",fid(SELF,ID),")"];
+formula(SELF,Class,{'?',C,T,E}) ->
+    [ "(",formula(SELF,Class,C), ") ? (", formula(SELF,Class,T), ") : (",
+      formula(SELF,Class,E), ")"];
 formula(SELF,Class,{'&&',L,R}) -> logic(SELF,Class,"&&",L,R);
 formula(SELF,Class,{'||',L,R}) -> logic(SELF,Class,"||",L,R);
 formula(SELF,Class,{'->',L,R}) -> logic(SELF,Class,"||",{'!',L},R);

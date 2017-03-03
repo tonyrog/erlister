@@ -535,6 +535,11 @@ expr({Op,_Ln,M},Class,_Type,Lookup,Vs,Es) when
     %% assert Type == boolean
     {M1,Es1} = expr(M,Class,boolean,Lookup,Vs,Es),
     {{Op,M1},Es1};
+expr({'?',_Ln,C,T,E},Class,Type,Lookup,Vs,Es) ->
+    {C1,Es1} = expr(C,Class,boolean,Lookup,Vs,Es),    
+    {T1,Es2} = expr(T,Class,Type,Lookup,Vs,Es1),
+    {E1,Es3} = expr(E,Class,Type,Lookup,Vs,Es2),
+    {{'?',C1,T1,E1},Es3};
 expr({Op,_Ln,L,R},Class,_Type,Lookup,Vs,Es) when 
       Op =:= '+'; Op =:= '-'; Op =:= '*'; Op =:= '/'; Op =:= '%' ->
     %% assert Type == unsigned|integer

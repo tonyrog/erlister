@@ -56,6 +56,7 @@ SOME		: {token,{'SOME',TokenLine}}.
 \[		: {token,{'[',TokenLine}}.
 \]		: {token,{']',TokenLine}}.
 ;		: {token,{';',TokenLine}}.
+\?		: {token,{'?',TokenLine}}.
 :		: {token,{':',TokenLine}}.
 ,		: {token,{',',TokenLine}}.
 \.		: {token,{'.',TokenLine}}.

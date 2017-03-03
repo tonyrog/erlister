@@ -32,6 +32,11 @@ expr({'ALL',{var,X},F},Vs) ->
     expr(F, [{all,X}|Vs]);
 expr({'SOME',{var,X},F},Vs) ->
     expr(F, [{some,X}|Vs]);
+expr({'?',C,T,E},Vs) ->
+    case expr(C,Vs) of
+	0 -> expr(E);
+	_ -> expr(T)
+    end;
 expr({'&&',L,R},Vs) ->
     case expr(L,Vs) of
 	0 -> 0;

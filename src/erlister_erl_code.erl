@@ -39,12 +39,14 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      loop(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
-declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
+declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,_MACHINES) ->
     [
      "-module('",ID,"').",?N,
      "-export([main/0,wait/4,loop/4,final/0]).",?N,
      "-define(B2I(X), if (X) -> 1; true -> 0 end).",?N,
      "-define(I2B(X), ((X) =/= 0)).", ?N,
+     [ ["-define(CLOCK_",ID,"_",C#clock.id,",",
+	integer_to_list(trunc(1000*C#clock.default)),").",?N] || C <- CLOCKS ],
      ?N
     ].
 
@@ -266,7 +268,7 @@ expand_trans([]) ->
 
 tlist(_ID,[],_Pre,_Sep) -> [];
 tlist(ID,[{T,_Ln}|Ts],Pre,Sep) ->
-    Timeout = "2000", %% fixme
+    Timeout = ["?CLOCK_",ID,"_",T], %% fixme read params
     [Pre,"erlister_rt:timer_start(clk_",ID,"_",T,",",Timeout,")",Sep | 
      tlist(ID,Ts,Pre,Sep)].
 
@@ -305,6 +307,10 @@ formula_(SELF,_Class,_Type,{state,ID}) ->
     ["(ST_",mid(SELF,ID)," =:= ", ?Q,fld(ID),?Q,")"];
 formula_(SELF,_Class,_Type,{timeout,ID}) ->
     ["(","CLK_",fid(SELF,ID)," =:= timeout)"];
+formula_(SELF,Class,Type,{'?',C,T,E}) ->
+    [ "if (",formula(SELF,Class,boolean,C), ") -> ",
+      formula(SELF,Class,Type,T), "; ",
+      "true -> ", formula(SELF,Class,Type,E), "end"];
 formula_(SELF,Class,Type,{'&&',L,R}) -> logic(SELF,Class,Type," andalso ",L,R);
 formula_(SELF,Class,Type,{'||',L,R}) -> logic(SELF,Class,Type," orelse ",L,R);
 formula_(SELF,Class,Type,{'->',L,R}) -> formula_(SELF,Class,Type,{'||',{'!',L},R});
