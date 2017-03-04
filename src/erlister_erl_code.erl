@@ -24,7 +24,7 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      init(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      final(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      wait(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
-     loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[])
+     main(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[])
     ];
 code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
 	      submachines=SUBMACHINES,
@@ -36,18 +36,20 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      init(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      final(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      wait(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
-     loop(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
+     main(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
 declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,_MACHINES) ->
     [
      "-module('",ID,"').",?N,
-     "-export([main/0,wait/4,loop/4,final/0]).",?N,
+     "-export([enter/0,enter/1,enter/2,wait/4,main/4,final/0]).",?N,
      "-define(B2I(X), if (X) -> 1; true -> 0 end).",?N,
      "-define(I2B(X), ((X) =/= 0)).", ?N,
      [ ["-define(CLOCK_",ID,"_",C#clock.id,",",
 	integer_to_list(trunc(1000*C#clock.default)),").",?N] || C <- CLOCKS ],
-     ?N
+     ?N,
+     "enter() -> enter(false).", ?N,
+     "enter(DEBUG) -> enter(DEBUG,#{}).", ?N
     ].
 
 final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
@@ -66,13 +68,13 @@ wait(_ID,_IN,_DEF,_OUT,_STATES,_TRANS,_CLOCKS,_MACHINES) ->
     [
      ?N,
      "wait(STATE,IN,OUT,DEBUG) ->",?N,
-     ?T,"if DEBUG -> io:format(\"state=~w\n\", [STATE]); true -> ok end,",?N,
+     ?T,"if DEBUG -> io:format(\"state=~w, in=~w, out=~w\\n\", [STATE,IN,OUT]); true -> ok end,",?N,
      ?T,"receive",?N,
-     ?T,?T,"{timeout,_Ref,_} -> loop(STATE,IN,OUT,DEBUG);",?N,
+     ?T,?T,"{timeout,_Ref,_} -> main(STATE,IN,OUT,DEBUG);",?N,
      ?T,?T,"debug   -> wait(STATE,IN,OUT,true);",?N,
      ?T,?T,"nodebug -> wait(STATE,IN,OUT,false);",?N,
      ?T,?T,"upgrade -> ?MODULE:wait(STATE,IN,OUT,DEBUG);", ?N,
-     ?T,?T,"INPUT -> loop(STATE,maps:merge(IN,INPUT),OUT,DEBUG)",?N,
+     ?T,?T,"INPUT -> main(STATE,maps:merge(IN,INPUT),OUT,DEBUG)",?N,
      ?T,"end.",?N
      ?N
     ].
@@ -86,39 +88,39 @@ init(ID,IN,_DEF,OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
 			   Expr =/= undefined] ||
 			 M <- MACHINES]),
     [
-     ?N,
-     "main() -> ",?N,
-     [?T,"wait(",?N,
-      %% STATES
-      ?T,"#{",?N,
-      arglist([[?Q,M#machine.name,"_state",?Q, " => ",
-		[?Q,hd(state_names(M#machine.states))],?Q] || 
-		  M <- MACHINES, M#machine.states =/= []],
-	      [?T,?T],",",?N),
-      if STATES =:= [] ->
-	      [];
-	 true ->
-	      [?T,?T,?Q,ID,"_state",?Q," => ",
-	       [?Q,hd(state_names(STATES))],?Q,?N]
-      end,
-      ?T, "}",",",?N,
-      %% INPUT
-      ?T, "#{",?N,
-      arglist([ [[?Q,ID,"_",Name,?Q]," => 0"] ||
-		  #var{id=Name} <- IN],
-	      [?T,?T],",",?N),?N,
-      ?T,"}",",",?N,
-      %% OUTPUT
-      ?T,"#{",?N,
-      arglist([[X," => 0"] || X <- OUT_LIST ],
-	      [?T,?T],",",?N),
-      ?N,
-      ?T,"},false).",?N
-     ]
-    ].
+     "enter(DEBUG,INPUT) -> ",?N,
+     %% INPUT
+     ?T, "IN0 = #{",?N,
+     arglist([ [[?Q,ID,"_",Name,?Q]," => 0"] ||
+		 #var{id=Name} <- IN],
+	     [?T,?T],",",?N),?N,
+     ?T,"}",",",?N,
+     ?T,"IN = maps:merge(IN0, INPUT),",?N,
+     %% OUTPUT
+     ?T, "OUT = #{",?N,
+     arglist([[X," => 0"] || X <- OUT_LIST ],
+	     [?T,?T],",",?N),
+     ?N,?T,"},",?N,
+     %% STATE
+     ?T, "STATE = #{ ",?N,
+     arglist([[?Q,M#machine.name,"_state",?Q, " => ",
+	       [?Q,hd(state_names(M#machine.states))],?Q] || 
+		 M <- MACHINES, M#machine.states =/= []],
+	     [?T,?T],",",?N),
+     if STATES =:= [] ->
+	     [];
+	true ->
+	     [?T,?T,?Q,ID,"_state",?Q," => ",
+	      [?Q,hd(state_names(STATES))],?Q,?N]
+     end,
+     ?T, "},",?N,
+
+     ?T,"main(STATE,IN,OUT,DEBUG).",
+     ?N
+     ].
 
 
-loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
+main(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
     OUT_LIST = [{ID,Name} || #var{id=Name,expr=Expr} <- OUT,
 			     Expr =/= undefined] ++
 	lists:append([ [{M#machine.name,Name} ||
@@ -127,7 +129,7 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 			 M <- MACHINES]),
     [
      ?N,
-     "loop(",?N,
+     "main(",?N,
       %% STATES
      ?T,"STATE = #{",?N,
      arglist([ [?T,?T,?Q,M#machine.name,"_state'"," := ",
@@ -190,26 +192,29 @@ loop(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
      [ [?T,"OUT1_",[ID,"_",Name]," = ", formula(ID,out,Type,Expr),",",?N] || 
 	 #var{id=Name,type=Type,expr=Expr} <- OUT,Expr =/= undefined],
 
-     ?T, "wait(STATE#{",?N,
-     arglist([ [?T,?T,?Q,M#machine.name,"_state",?Q," => ",
-		["ST1_",M#machine.name]] ||
-		 M <- MACHINES],
-	     [?T,?T],",",?N),
-     if STATES =:= [] ->
-	     [?N];
-	true ->
-	     [?T,?T,?Q,ID,"_state",?Q," => ",
-	      ["ST1_",ID],?N]
-     end,
-     ?T, "}",",",?N,
-     ?T,"IN,",?N,
-     %% OUTPUT
-     ?T,"OUT#{",?N,
-     arglist([ [[?Q,M,"_",Name,?Q]," => ",
-		["OUT1_",M,"_",Name]] ||
-		 {M,Name} <- OUT_LIST],
-	     [?T,?T],",",?N),?N,
-     ?T,"},DEBUG).", ?N
+     [?T,"OUT1 = OUT#{",?N,
+      arglist([ [[?Q,M,"_",Name,?Q]," => ",
+		 ["OUT1_",M,"_",Name]] ||
+		  {M,Name} <- OUT_LIST],
+	      [?T,?T],",",?N),?N,
+      ?T,"},", ?N],
+
+     [?T, "STATE1 = STATE#{",?N,
+      arglist([ [?T,?T,?Q,M#machine.name,"_state",?Q," => ",
+		 ["ST1_",M#machine.name]] ||
+		  M <- MACHINES],
+	      [?T,?T],",",?N),
+      if STATES =:= [] ->
+	      [?N];
+	 true ->
+	      [?T,?T,?Q,ID,"_state",?Q," => ",
+	       ["ST1_",ID],?N]
+      end,
+      ?T, "},",?N],
+     [?T, "if STATE1 =:= STATE -> wait(STATE1,IN,OUT1,DEBUG)",?E,
+      ?T,?T, "true -> main(STATE1,IN,OUT1,DEBUG)",?N,
+      ?T, "end."],
+     ?N
     ].
 
 code_trans(_ID,[]) ->
