@@ -39,7 +39,7 @@ code(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      main(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
-declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,_MACHINES) ->
+declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      "-module('",ID,"').",?N,
      "-export([enter/0,enter/1,enter/2,wait/4,main/4,final/0]).",?N,
@@ -47,6 +47,12 @@ declare(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,_MACHINES) ->
      "-define(I2B(X), ((X) =/= 0)).", ?N,
      [ ["-define(CLOCK_",ID,"_",C#clock.id,",",
 	integer_to_list(trunc(1000*C#clock.default)),").",?N] || C <- CLOCKS ],
+
+     [
+      [ ["-define(CLOCK_",M#machine.name,"_",C#clock.id,",",
+	 integer_to_list(trunc(1000*C#clock.default)),").",?N] || C <- M#machine.clocks ] || M <- MACHINES],
+
+
      ?N,
      "enter() -> enter(false).", ?N,
      "enter(DEBUG) -> enter(DEBUG,#{}).", ?N
@@ -178,7 +184,7 @@ main(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,MACHINES) ->
 		 #var{id=Name,type=Type,expr=Expr} <-
 		     M#machine.def,Expr =/= undefined],
 	     [[?T,["CLK_",Mid,"_",T]," = ",
-	       "erlister_rt:read_timer(", "clk_",ID,"_",T,"),",?N] ||
+	       "erlister_rt:timer_read(", "clk_",Mid,"_",T,"),",?N] ||
 		 #clock{id=T} <- M#machine.clocks],
 	     code_trans(Mid, M#machine.trans),
 	     [ [?T,"OUT1_",[Mid,"_",Name]," = ", 

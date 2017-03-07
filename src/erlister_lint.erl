@@ -34,7 +34,7 @@ machine_([{machine,Ln,{identifier,_Ln1,ID},[{submachines,Ms}|Misc],Machines}]) -
     {DEF2,Es6} = lint_def(DEF1,[],Sym2,Es51),
     {CLOCK2,Es7} = lint_clock(CLOCK1,[],Sym2,Es6),
     %% Fixme: remove global in variables?
-    {OUT2,Es8} = lint_out(OUT1,[],Sym2,true,Es7),
+    {OUT2,Es8} = lint_out(OUT1,[],Sym2,ID,[],Es7),
     {#machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,clocks=CLOCK2,
 	      submachines=SUBMACHINES,machines=MACHINES1},Es8};
 machine_([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}]) ->
@@ -45,7 +45,7 @@ machine_([{machine,Ln,{identifier,_Ln1,ID},Misc,{states,States},{trans,Trans}}])
     {PAR2,Es31} = lint_param(PAR1,[],Sym2,Es3),
     {DEF2,Es4} = lint_def(DEF1,[],Sym2,Es31),
     {CLOCK2,Es5} = lint_clock(CLOCK1,[],Sym2,Es4),
-    {OUT2,Es6} = lint_out(OUT1,[],Sym2,false,Es5),
+    {OUT2,Es6} = lint_out(OUT1,[],Sym2,ID,[],Es5),
     %% FIXME: check that all state has rules
     {TRANS1,Es7} = lint_trans(Trans,[],Sym2,Es6),
     {#machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,clocks=CLOCK2,
@@ -96,7 +96,7 @@ lint_submachine_list([{submachine0,Ln,ID,IN1,PAR1,DEF1,OUT1,CLOCK1,
     {PAR2,Es11} = lint_param(PAR1,[],Sym1,Es1),
     {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es11),
     {CLOCK2,Es3} = lint_clock(CLOCK1,[],Sym1,Es2),
-    {OUT2,Es4} = lint_out(OUT1,[],Sym1,false,Es3),
+    {OUT2,Es4} = lint_out(OUT1,[],Sym1,ID,SUBMACHINES,Es3),
     %% FIXME: check that all state has rules
     {TRANS1,Es5} = lint_trans(Trans,[],Sym1,Es4),
     M = #machine{line=Ln,name=ID,in=IN2,param=PAR2,def=DEF2,out=OUT2,
@@ -287,10 +287,26 @@ lint_clock([Clock=#clock{}|Xs],Acc,Sym,Es) ->
 lint_clock([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
-lint_out([V=#var{expr=Expr}|Xs],Acc,Sym,Sub,Es) ->
-    {Expr1,Es1} = lint_osat(Expr,V#var.type,Sym,Sub,Es),
-    lint_out(Xs,[V#var{expr=Expr1}|Acc],Sym,Sub,Es1);
-lint_out([],Acc,_Sym,_Sub,Es) ->
+%% Lint  output SAT formual
+%% For submachines out variables are
+%%   local IN, local DEF, local STATE
+%% For machine variables are
+%%   global IN, global DEF, STATE and submachine OUT, submachine STATE
+%%
+lint_out([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
+    {Expr1,Es1} =
+	expr(Expr,out,V#var.type,
+	     fun(I={identifier,_Ln,_ID},Es) ->
+		     %% global IN, DEF or STATE
+		     lint_in_def_state_variable(I,Sym,Es);
+		(I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
+		     %% sibling STATE,OUT?
+		     lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
+		({timeout,_Ln,{identifier,Ln,ID}},Es) ->
+		     lint_timeout_(ID,Ln,Sym,Es)
+	     end, [], Es0),
+    lint_out(Xs,[V#var{expr=Expr1}|Acc],Sym,Mid,SUBMACHINES,Es1);
+lint_out([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 lint_dsat(Form,Type,Sym,Es0) ->
@@ -304,24 +320,6 @@ lint_dsat(Form,Type,Sym,Es0) ->
 				  " can not be used in def section"]},
 		 {{timeout,ID},[E|Es]}
 	 end,[],Es0).
-
-%% Lint  output SAT formual
-%% For submachines out variables are
-%%   local IN, local DEF, local STATE
-%% For machine variables are
-%%   global IN, global DEF, STATE and submachine OUT, submachine STATE
-%%
-lint_osat(Form,Type,Sym,_Sub,Es0) ->
-    expr(Form,out,Type,
-	 fun(I={identifier,_Ln,_ID},Es) ->
-		 %% global IN, DEF or STATE
-		 lint_in_def_state_variable(I,Sym,Es);
-	    (I={field,_Ln,{identifier,_,_OBJ},{identifier,_,_ID}},Es) ->
-		 %% sibling STATE,OUT?
-		 lint_out_or_state_variable(I,Sym,"",[],Es);
-	    ({timeout,_Ln,{identifier,Ln,ID}},Es) ->
-		 lint_timeout_(ID,Ln,Sym,Es)
-	 end, [], Es0).
 
 lint_trans([{{identifier,Ln,ID},TR}|Xs],Acc,Sym,Es) ->
     case maps:find(ID,Sym) of
@@ -413,6 +411,8 @@ lint_out_or_state_variable_(ID,Ln,Sym,Mid,SUBMACHINES,Es) ->
 			false ->
 			    {{out,ID,Type},Es}
 		    end;
+		[M,".",_FLD] ->
+		    {{out1,ID,Type},Es};
 		_ ->
 		    {{out,ID,Type},Es}
 	    end;
