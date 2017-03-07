@@ -366,6 +366,8 @@ lint_start([],Acc,_Sym,Es) ->
 %%  allowed variables are 'in' parameters AND 'def' defined values
 %%  also timeout expressions are allowed.
 
+%% Fixme: global in should not be accessible directly!!!
+
 lint_tsat(Form,Sym,Es0) ->
     expr(Form,trans,boolean,
 	 fun({identifier,Ln,ID},Es) ->

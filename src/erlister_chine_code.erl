@@ -111,7 +111,7 @@ code_trans(ID,TRs) ->
     GroupTrans = group_trans(TRs),
     Fs = [id([ID,F,1]) || {F,_} <- GroupTrans],
     [{state,ID},'@',
-     {ibranch,Fs},
+     {jmpi,Fs},
      exit, %% FIME: bad branch/fail ?
      code_from_group(ID, GroupTrans)].
 
@@ -126,11 +126,11 @@ code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start} | ToGroup]) ->
     Set1 = select(ID,Set,Cond),
     Acc1 = [[{label,id([ID,From,I])},
 	     formula(ID,trans,Cond),
-	     {zbranch,id([ID,From,I+1])},
+	     {jmpz,id([ID,From,I+1])},
 	     {state,ID},{const,id([ID,To])},'!',
 	     tlist(ID,Start),
 	     %% FIXME: add actions,
-	     {branch,id([ID,"out"])}] | Acc],
+	     {jmp,id([ID,"out"])}] | Acc],
     code_to_group(ID, From, I+1, Set1, Acc1, ToGroup);
 code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
     %% When all transitions fails then we end up here, here we have
@@ -142,7 +142,7 @@ code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
 	     [[{const,id([ID,I])},select_input] || I <- ordsets:to_list(ISet)],
 	     [[{const,id([ID,T])},select_timer] || T <- ordsets:to_list(TSet)],
 	     yield,
-	     {branch,main}
+	     {jmp,main}
 	    ] | Acc],
     lists:reverse(Acc1).
      
@@ -284,6 +284,9 @@ to_string(A) when is_atom(A) -> atom_to_list(A);
 to_string(A) when is_integer(A),A>=0 -> integer_to_list(A);
 to_string(A) when is_list(A) -> A.
 
+%%
+%% Make the code to a nice flat list
+%%
 code_flatten(List) ->
     code_flatten_(lists:flatten(List)).
 
@@ -295,11 +298,3 @@ code_flatten_([Op|Code]) ->
     [Op | code_flatten(Code)];
 code_flatten_([]) ->
     [].
-
-
-
-
-
-
-
-

@@ -92,7 +92,7 @@ submachine_def ->
 	trans_def :
 	{submachine,line('$1'),'$2','$4','$5','$6'}.
 
-misc_defs -> misc_def : '$1'.
+misc_defs -> '$empty' : [].
 misc_defs -> misc_defs misc_def : '$1'++'$2'.
 
 misc_def -> in_def    : ['$1'].

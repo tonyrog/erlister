@@ -116,6 +116,23 @@ sibling sub machines.
         high: low enable && timeout(Th) start(Tl);
         low: high enable && timeout(Tl) start(Th);
 
+# Types on variables
+
+The following types may be used for in, out, def and param declarations
+( boolean is the default ) :
+
+    boolean   
+    unsigned8
+    unsigned16
+    unsigned32
+    integer8
+    integer16
+    integer32
+
+and are used like
+
+    unsigned16 in sensor_value;
+
 # General syntax of the formula
 
 The following BNF gives the syntax for a general formula,
@@ -124,8 +141,8 @@ note that not all parts are valid in all sections.
     <digit> := "0".."9"
     <letter> := "a".."z"|"A".."Z"|"_"
     <identifier> := <letter>(<letter>|<digit>)*
-    <constant> := "0" | "1"
     <number> := <digit>+
+    <constant> := "true" | "false" | <number>
     <arg> := <number> | <identifier>
 
     <formula> ::= <constant>
@@ -144,16 +161,21 @@ note that not all parts are valid in all sections.
               | <formula> ">" <formula>
               | <formula> "==" <formula>
               | <formula> "!=" <formula>
+	      | <formula> "&" <formula>
+	      | <formula> "|" <formula>
+	      | <formula> "^" <formula>
               | "!" <formula>
+              | "~" <formula>
               | <formula> "&&" <formula>
               | <formula> "||" <formula>
               | <formula> "->" <formula>
+              | <formula> "<->" <formula>
+              | <formula> ? <formula> : <formula>
               | "ALL" <identifier> <formula>
               | "SOME" <identifier> <formula>
 
 # Roadmap
 
-- Add bit operators in formulas.
 - Add "running(T)" for timer to check if timer is running, then 
   def never_started = !running(T) && !timeout(T)
 - Add ramp object R for generating output ramps over time, ramp object may
