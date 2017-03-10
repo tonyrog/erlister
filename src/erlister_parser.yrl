@@ -20,19 +20,20 @@ Nonterminals
 	trans_def trans_list trans_list_item
         trans_def_list trans_def_item
         start_timer start_timer_list
+        action action_decls action_decl action_stmts action_stmt
         formula
         identifier_list
         argument_list
         argument
         number
-        type
+        type opt_type
         comp arith
 	.
 
 Terminals
 	'&&' '||' '!' '->' '<->' 'ALL' 'SOME'
         '&' '^' '|' '~' '<<' '>>'
-	'=' '(' ')' '[' ']' ';' ':' '.' ',' '-' '?'
+	'=' '(' ')' '[' ']' '{' '}' ';' ':' '.' ',' '-' '?'
         '<=' '>=' '<' '>' '==' '!='
         '+' '*' '/' '%'
 	'machine' 'in' 'param' 'def' 'out' 'clocks' 'states' 'trans' 'start' 
@@ -63,7 +64,7 @@ Rootsymbol definitions.
 definitions -> machine_defs : '$1'.
 
 machine_defs -> machine_def : ['$1'].
-machine_defs -> machine_defs machine_def : '$1'++['$2'].
+machine_defs -> machine_def machine_defs  : ['$1'|'$2'].
 
 machine_def -> atomic_machine_def : '$1'.
 machine_def -> composed_machine_def : '$1'.
@@ -83,7 +84,7 @@ composed_machine_def ->
 	{machine,line('$1'),'$2',['$4'|'$5'],'$6'}.
 
 submachine_defs -> submachine_def : ['$1'].
-submachine_defs -> submachine_defs submachine_def : '$1'++['$2'].
+submachine_defs -> submachine_def submachine_defs : ['$1'|'$2'].
 
 submachine_def ->
     'submachine' identifier ';'
@@ -93,7 +94,7 @@ submachine_def ->
 	{submachine,line('$1'),'$2','$4','$5','$6'}.
 
 misc_defs -> '$empty' : [].
-misc_defs -> misc_defs misc_def : '$1'++'$2'.
+misc_defs -> misc_def misc_defs  : '$1'++'$2'.
 
 misc_def -> in_def    : ['$1'].
 misc_def -> param_def : ['$1'].
@@ -101,7 +102,7 @@ misc_def -> def_def   : ['$1'].
 misc_def -> out_def   : ['$1'].
 misc_def -> clocks_def : ['$1'].
 
-param_def -> type 'param' param_list ';' : {param,'$1','$3'}.
+param_def -> opt_type 'param' param_list ';' : {param,'$1','$3'}.
 
 param_list -> param_spec : ['$1'].
 param_list -> param_list ',' param_spec : '$1' ++ ['$3'].
@@ -109,7 +110,7 @@ param_list -> param_list ',' param_spec : '$1' ++ ['$3'].
 param_spec -> identifier : {'$1',default}.
 param_spec -> identifier '=' number : {'$1','$3'}.
 
-in_def -> type 'in' in_list ';' : {in,'$1','$3'}.
+in_def -> opt_type 'in' in_list ';' : {in,'$1','$3'}.
 
 in_list -> identifier : ['$1'].
 in_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
@@ -117,13 +118,13 @@ in_list -> in_list ',' identifier   : '$1' ++ ['$3'].
 in_list -> in_list ',' identifier '=' formula : 
 	       '$1' ++ [{'=',line('$4'),'$3','$5'}].
 
-def_def -> type 'def' def_list ';' : {def,'$1','$3'}.
+def_def -> opt_type 'def' def_list ';' : {def,'$1','$3'}.
 
 def_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
 def_list -> def_list ',' identifier '=' formula : 
 		'$1' ++ [{'=',line('$4'),'$3','$5'}].
 
-out_def -> type 'out' out_list ';' : {out,'$1','$3'}.
+out_def -> opt_type 'out' out_list ';' : {out,'$1','$3'}.
 
 out_list -> identifier '=' formula : [{'=',line('$2'),'$1','$3'}].
 out_list -> out_list ',' identifier '=' formula :
@@ -154,24 +155,46 @@ trans_list_item -> identifier ':' trans_def_list ';' : {'$1','$3'}.
 trans_def_list -> trans_def_item  : ['$1'].
 trans_def_list -> trans_def_list ',' trans_def_item  : '$1'++['$3'].
 
-trans_def_item -> identifier formula :
-		      {'$1','$2',{start,[]}}.
-trans_def_item -> identifier formula start_timer_list :
-		      {'$1','$2',{start,'$3'}}.
+trans_def_item -> identifier formula action :
+		      {'$1','$2',[],'$3'}.
+trans_def_item -> identifier formula start_timer_list action :
+		      {'$1','$2','$3','$4'}.
 
 start_timer_list -> start_timer    : ['$1'].
 start_timer_list -> start_timer_list start_timer : '$1'++['$2'].
 
 start_timer -> 'start' '(' identifier ')' : '$3'.
 
+action -> '$empty' : [].
+action -> '{' action_decls action_stmts '}' : '$2'++'$3'.
+
+action_decls -> '$empty' : [].
+action_decls -> action_decl ';' action_decls : ['$1'|'$3'].
+
+action_decl -> type identifier : 
+		   {decl,line('$1'),'$1','$2',undefined}.
+action_decl -> type identifier '=' formula :
+		   {decl,line('$1'),'$1','$2','$4'}.
+
+action_stmts -> '$empty' : [].
+action_stmts -> action_stmt ';' action_stmts : ['$1'|'$3'].
+
+action_stmt -> identifier '=' formula :
+		   {store,line('$1'),'$1','$3'}.
+action_stmt -> identifier '(' argument_list ')' : 
+		   {call,line('$1'),'$1','$3'}.
+
 identifier_list -> identifier : ['$1'].
-identifier_list -> identifier_list ',' identifier : '$1'++['$3'].
+identifier_list -> identifier ',' identifier_list : ['$1'|'$3'].
 
 argument_list -> argument : ['$1'].
-argument_list -> argument_list ',' argument : '$1'++['$3'].
+argument_list -> argument ',' argument_list : ['$1'|'$3'].
 
 argument -> number : '$1'.
 argument -> identifier : '$1'.
+
+opt_type -> type : '$1'.
+opt_type -> '$empty' : boolean.
 
 type -> boolean    : boolean.
 type -> unsigned8  : unsigned8.
@@ -180,7 +203,6 @@ type -> unsigned32 : unsigned32.
 type -> integer8   : integer8.
 type -> integer16  : integer16.
 type -> integer32  : integer32.
-type -> '$empty'   : boolean.
 
 formula -> true  : '$1'.
 formula -> false : '$1'.

@@ -14,7 +14,7 @@
 code(M) ->
     Code = code_(M),
     FlatCode = code_flatten(Code),
-    io_lib:format("~p\n", [FlatCode]).
+    io_lib:format("~p.\n", [FlatCode]).
 
 code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
 	      submachines=undefined,
@@ -56,19 +56,28 @@ final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
 init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
     [
      {label,init},
+     
+     %% enumerate all timer to give them uniq numbers
+     {enum,[E||
+	       {E} <-
+		   lists:flatten(
+		     [ [[{id([M#machine.name,T])}] ||
+			   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
+		     [[{id([ID,T])}] || #clock{id=T} <- CLOCKS])]},
+
      [ [[{const,id([M#machine.name,T])},timer_init] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
      [[{const,id([ID,T])},timer_init] || #clock{id=T} <- CLOCKS],
      
      [if M#machine.states =:= [] -> [];
-	 true -> [{state,M#machine.name},
-		  {const,id([M#machine.name,
-			     hd(state_names(M#machine.states))])},'!']
+	 true -> [{const,id([M#machine.name,
+			     hd(state_names(M#machine.states))])},
+		  {const,M#machine.name},'!']
 	 end || M <- MACHINES],
      if STATES =:= [] ->
 	     [];
 	true ->
-	     [{state,ID},{const,id([ID,hd(state_names(STATES))])},'!']
+	     [{const,id([ID,hd(state_names(STATES))])},{const,ID},'!']
      end,
      exit
     ].
@@ -78,29 +87,27 @@ main(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
      {label, main},
      [ begin 
 	   put({def,fid(ID,Name)},Expr),
-	   [{def,id([ID,Name])},formula(ID,def,Expr),'!'] 
+	   [formula(ID,def,Expr),{def,id([ID,Name])},'!'] 
        end ||
 	 #var{id=Name,expr=Expr} <- DEF,Expr =/= undefined ],
      [ begin
 	   Mid = M#machine.name,
 	   [ [ begin 
-		   [{def,id([Mid,Name])},formula(ID,in,Pred),'!'] 
+		   [{def,formula(ID,in,Pred),id([Mid,Name])},'!'] 
 	       end || 
 		 #var{id=Name,expr=Pred} <- M#machine.in,Pred =/= undefined],
 	     [begin
 		  put({def,fid(Mid,Name)},Expr),
-		  [{def,id([Mid,Name])},formula(ID,def,Expr),'!']
+		  [{def,formula(ID,def,Expr),id([Mid,Name])},'!']
 	      end || 
 		 #var{id=Name,expr=Expr} <- M#machine.def,Expr =/= undefined],
 	     code_trans(Mid, M#machine.trans),
-	     [ [{output,id([Mid,Name])},
-		formula(Mid,out,Sat),'!'] || 
+	     [ [formula(Mid,out,Sat),{output,id([Mid,Name])},'!'] || 
 		 #var{id=Name,expr=Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      code_trans(ID, TRANS),
-     [ [{output,id([ID,Name])},
-	formula(ID,out,Sat),'!'] ||
+     [ [formula(ID,out,Sat),{output,id([ID,Name])},'!'] ||
 	 #var{id=Name,expr=Sat} <- OUT,Sat =/= undefined],
      exit
     ].
@@ -109,10 +116,8 @@ code_trans(_ID,[]) ->
     [];
 code_trans(ID,TRs) ->
     GroupTrans = group_trans(TRs),
-    Fs = [id([ID,F,1]) || {F,_} <- GroupTrans],
-    [{state,ID},'@',
-     {jmpi,Fs},
-     exit, %% FIME: bad branch/fail ?
+    Fs = [{caddr,id([ID,F,1])} || {F,_} <- GroupTrans],
+    [{array,Fs},{const,ID},'@','[]','jmp*',
      code_from_group(ID, GroupTrans)].
 
 code_from_group(ID, [{From,FromGroup}|GroupTrans]) ->
@@ -122,14 +127,15 @@ code_from_group(ID, [{From,FromGroup}|GroupTrans]) ->
 code_from_group(ID, []) ->
     [{label,id([ID,"out"])}].
 
-code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start} | ToGroup]) ->
+code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start,Action} | ToGroup]) ->
     Set1 = select(ID,Set,Cond),
     Acc1 = [[{label,id([ID,From,I])},
 	     formula(ID,trans,Cond),
 	     {jmpz,id([ID,From,I+1])},
-	     {state,ID},{const,id([ID,To])},'!',
+	     {const,id([ID,To])},{const,ID},'!',
 	     tlist(ID,Start),
 	     %% FIXME: add actions,
+	     {comment,lists:flatten(io_lib:format("~p",[Action]))},
 	     {jmp,id([ID,"out"])}] | Acc],
     code_to_group(ID, From, I+1, Set1, Acc1, ToGroup);
 code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
@@ -170,18 +176,18 @@ enum_state(MID, STATES) ->
     
 %% group transitions as [{From,[{Cond,To,Start}]}]
 group_trans(TRs) ->
-    Ls = [{From,_,_,_}|_] = lists:sort(expand_trans(TRs)),
+    Ls = [{From,_,_,_,_}|_] = lists:sort(expand_trans(TRs)),
     group_trans_(From, Ls, [], []).
 
-group_trans_(From, [{From,Cond,To,Start}|TRs], FromList, Acc) ->
-    group_trans_(From, TRs, [{Cond,To,Start}|FromList], Acc);
-group_trans_(From, [{From1,Cond,To,Start}|TRs], FromList, Acc) ->
-    group_trans_(From1, TRs, [{Cond,To,Start}], [{From,FromList}|Acc]);
+group_trans_(From, [{From,Cond,To,Start,Action}|TRs], FromList, Acc) ->
+    group_trans_(From, TRs, [{Cond,To,Start,Action}|FromList], Acc);
+group_trans_(From, [{From1,Cond,To,Start,Action}|TRs], FromList, Acc) ->
+    group_trans_(From1, TRs, [{Cond,To,Start,Action}], [{From,FromList}|Acc]);
 group_trans_(From, [], FromList, Acc) ->
     lists:reverse([{From,FromList}|Acc]).
 
 expand_trans([{From,_Ln0,FromList} | TRs]) ->
-    [{From,Cond,To,Start} || {To,_Ln1,Cond,Start} <- FromList] ++
+    [{From,Cond,To,Start,Action} || {To,_Ln1,Cond,Start,Action} <- FromList] ++
 	expand_trans(TRs);
 expand_trans([]) ->
     [].
@@ -200,14 +206,14 @@ formula(SELF,_Class,{in,ID,Type})     ->
     [{const,fid(SELF,ID)},{const,Type},'input@'];
 formula(SELF,_Class,{param,ID,_Index,_Type})  ->
     [{const,fid(SELF,ID)},'param@'];
-formula(SELF,_Class,{out1,ID,Type})   ->
+formula(SELF,_Class,{out1,ID,Type}) ->
     [{const,fid(SELF,ID)},{const,Type},'output1@'];
 formula(SELF,_Class,{out,ID,Type})    ->
     [{const,fid(SELF,ID)},{const,Type},'output!'];
 formula(SELF,_Class,{def,ID,_Type})   ->
     [{def,fid(SELF,ID)},'@'];
 formula(SELF,_Class,{state,ID})       ->
-    [{state,mid(SELF,ID)},'@',{const,fid(SELF,ID)},'='];
+    [{const,mid(SELF,ID)},'@',{const,fid(SELF,ID)},'='];
 formula(SELF,_Class,{timeout,ID})     ->
     [{const,fid(SELF,ID)},timer_timeout];
 formula(SELF,Class,{'?',C,T,E}) ->

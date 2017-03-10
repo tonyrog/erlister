@@ -233,9 +233,10 @@ code_trans(ID,TRs) ->
 	 [ begin
 	       [?T,?T,?T,?T,formula_(ID,trans,boolean,Cond), " ->",?N,
 		tlist(ID,Start,[?T,?T,?T,?T,?T],[",",?N]),
+		action(Action,[?T,?T,?T,?T,?T],[",",?N]),
 		?T,?T,?T,?T,?T,[?Q,To,?Q],?E
 	       ]
-	   end || {Cond,To,Start} <- FromGroup],
+	   end || {Cond,To,Start,Action} <- FromGroup],
 	 [?T,?T,?T,?T,"true -> ", ["ST_",ID],?N,
 	  ?T,?T,?T,"end",?E]
 	] || {From,FromGroup} <- group_trans(TRs)],
@@ -261,18 +262,18 @@ state_names(STATES) ->
     
 %% group transitions as [{From,[{Cond,To,Start}]}]
 group_trans(TRs) ->
-    Ls = [{From,_,_,_}|_] = lists:sort(expand_trans(TRs)),
+    Ls = [{From,_,_,_,_}|_] = lists:sort(expand_trans(TRs)),
     group_trans_(From, Ls, [], []).
 
-group_trans_(From, [{From,Cond,To,Start}|TRs], FromList, Acc) ->
-    group_trans_(From, TRs, [{Cond,To,Start}|FromList], Acc);
-group_trans_(From, [{From1,Cond,To,Start}|TRs], FromList, Acc) ->
-    group_trans_(From1, TRs, [{Cond,To,Start}], [{From,FromList}|Acc]);
+group_trans_(From, [{From,Cond,To,Start,Action}|TRs], FromList, Acc) ->
+    group_trans_(From, TRs, [{Cond,To,Start,Action}|FromList], Acc);
+group_trans_(From, [{From1,Cond,To,Start,Action}|TRs], FromList, Acc) ->
+    group_trans_(From1, TRs, [{Cond,To,Start,Action}], [{From,FromList}|Acc]);
 group_trans_(From, [], FromList, Acc) ->
     lists:reverse([{From,FromList}|Acc]).
 
 expand_trans([{From,_Ln0,FromList} | TRs]) ->
-    [{From,Cond,To,Start} || {To,_Ln1,Cond,Start} <- FromList] ++
+    [{From,Cond,To,Start,Action} || {To,_Ln1,Cond,Start,Action} <- FromList] ++
 	expand_trans(TRs);
 expand_trans([]) ->
     [].
@@ -282,6 +283,12 @@ tlist(ID,[{T,_Ln}|Ts],Pre,Sep) ->
     Timeout = ["?CLOCK_",ID,"_",T], %% fixme read params
     [Pre,"erlister_rt:timer_start(clk_",ID,"_",T,",",Timeout,")",Sep | 
      tlist(ID,Ts,Pre,Sep)].
+
+%% FIXME: implement
+action([],_Pre,_Sep) -> [];
+action([A|As],Pre,Sep) ->
+    [Pre,"%% ",lists:flatten(io_lib:format("~p",[A])),Sep |
+     action(As,Pre,Sep)].
 
 arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];

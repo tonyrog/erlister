@@ -334,7 +334,7 @@ lint_trans([{{identifier,Ln,ID},TR}|Xs],Acc,Sym,Es) ->
 lint_trans([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
-lint_trans_list([{{identifier,Ln,ID},Sat,{start,START}}|TR],Acc,Sym,Es) ->
+lint_trans_list([{{identifier,Ln,ID},Sat,Start,Action}|TR],Acc,Sym,Es) ->
     Es1 = case maps:find(ID,Sym) of
 	      {ok,#state{}} -> Es;
 	      {ok,_} ->
@@ -343,8 +343,9 @@ lint_trans_list([{{identifier,Ln,ID},Sat,{start,START}}|TR],Acc,Sym,Es) ->
 		  [{Ln,?MODULE,["state ", ID, " not declared"]}|Es]
 	  end,
     {Sat1,Es2} = lint_tsat(Sat,Sym,Es1),
-    {START1,Es3} = lint_start(START,[],Sym,Es2),
-    lint_trans_list(TR,[{ID,Ln,Sat1,START1}|Acc],Sym,Es3);
+    {START1,Es3} = lint_start(Start,[],Sym,Es2),
+    {ACTION1,Es4} = lint_action(Action,[],#{},Es3),
+    lint_trans_list(TR,[{ID,Ln,Sat1,START1,ACTION1}|Acc],Sym,Es4);
 lint_trans_list([],Acc,_Sym,Es) ->
     {Acc,Es}.
 
@@ -358,6 +359,57 @@ lint_start([{identifier,Ln,ID}|START],Acc,Sym,Es) ->
     end;
 lint_start([],Acc,_Sym,Es) ->
     {Acc,Es}.
+
+lint_action([{decl,Ln,Type,{identifier,_Ln,Var},Init}|As],Acc,Sym,Es) ->
+    %% fixme: check init expression
+    V = #var{id=Var,line=Ln,type=Type,class=var,expr=Init},
+    case maps:find(Var,Sym) of
+	{ok,_} ->
+	    E = {Ln,?MODULE,[Var, " is already declared"]},
+	    lint_action(As,[{decl,V}|Acc],Sym,[E|Es]);
+	error ->
+	    Sym1 = maps:put(Var,V,Sym),
+	    lint_action(As,[{decl,V}|Acc],Sym1,Es)
+    end;
+lint_action([{store,Ln,{identifier,_Ln,Var},Expr}|As],Acc,Sym,Es) ->
+    case maps:find(Var,Sym) of
+	error ->
+	    E = {Ln,?MODULE,[Var, " is not declared"]},
+	    lint_action(As,[{store,Var,Expr}|Acc],Sym,[E|Es]);
+	{ok,_V} ->
+	    lint_action(As,[{store,Var,Expr}|Acc],Sym,Es)
+    end;
+lint_action([{call,Ln,{identifier,_Ln,Func},Args}|As],Acc,Sym,Es) ->
+    case find_signature(Func) of
+	false ->
+	    E = {Ln,?MODULE,[Func," is not a defined function"]},
+	    lint_action(As,[{call,Func,Args}|Acc],Sym,[E|Es]);
+	_Sig={_Ret,F,ATypes} ->
+	    case length(ATypes) =:= length(Args) of
+		true ->
+		    lint_action(As, [{call,F,Args}|Acc], Sym, Es);
+		false ->
+		    E = {Ln,?MODULE,["wrong number of arguments to ", Func]},
+		    lint_action(As, [{call,F,Args}|Acc], Sym, [E|Es])
+	    end
+    end;
+lint_action([],Acc,_Sym,Es) -> {Acc,Es}.
+
+find_signature("param_fetch")    -> {integer32,'param@',[unsigend16,unsigned8]};
+find_signature("param_store")    -> {void,'param!',[unsigend16,unsigned8,integer32]};
+find_signature("uart_send")      -> {void,'emit',[integer8]};
+find_signature("uart_recv")      -> {integer8,'key',[]};
+find_signature("uart_avail")     -> {boolean,'?key',[]};
+find_signature("timer_now")      -> {unsigned32,'now',[]};
+find_signature("gpio_input")     -> {void,gpio_input,[integer32]};
+find_signature("gpio_output")    -> {void,gpio_output,[integer32]};
+find_signature("gpio_set")       -> {void,gpio_set,[integer32]};
+find_signature("gpio_clr")       -> {void,gpio_clr,[integer32]};
+find_signature("gpio_get")       -> {integer32,gpio_get,[]};
+find_signature("analog_send")    -> {void,analog_send,[integer32,unsigned16]};
+find_signature("analog_recv")    -> {integer32,analog_recv,[unsigned16]};
+find_signature("can_send")       -> {void,can_send,[unsigned16,unsigned8,integer32]};
+find_signature(_) -> false.
 
 %% 
 %% Lint transitions formulas
@@ -411,7 +463,7 @@ lint_out_or_state_variable_(ID,Ln,Sym,Mid,SUBMACHINES,Es) ->
 			false ->
 			    {{out,ID,Type},Es}
 		    end;
-		[M,".",_FLD] ->
+		[_M,".",_FLD] ->
 		    {{out1,ID,Type},Es};
 		_ ->
 		    {{out,ID,Type},Es}
