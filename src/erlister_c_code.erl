@@ -161,10 +161,10 @@ code_trans(ID,TRs) ->
     [?T,"switch(ctx->st_",ID,") {",?N,
      [[ [?T,"case ",[ID,"_",From],":",?N,
 	 [ [?T,?T,"if (", formula(ID,trans,Cond), ") {",?N,
-	    ?T,?T,?T,"ctx->st_",ID," = ",
-	    [ID,"_",To],";",
+	    ?T,?T,?T,"ctx->st_",ID," = ",[ID,"_",To],";",
 	    tlist(ID,Start,[?N,?T,?T,?T]),
 	    action(Action,[?N,?T,?T,?T]),
+	    ?N,
 	    ?T,?T,?T,"break",?E,
 	    ?T,?T,"}",?N] || {Cond,To,Start,Action} <- FromGroup],
 	 [?T,?T,"break",?E]]
@@ -217,11 +217,11 @@ expand_trans([]) ->
 
 tlist(_ID,[],_Sep) -> [];
 tlist(ID,[{T,_Ln}|Ts],Sep) ->
-    [Sep,"timer_start(&ctx->clk_",ID,"_",T,");",?N | tlist(ID,Ts,Sep)].
+    [Sep,"timer_start(&ctx->clk_",ID,"_",T,");" | tlist(ID,Ts,Sep)].
 
 action([],_Sep) -> [];
 action([A|As],Sep) ->
-    [Sep,"// ",io_lib:format("~p;",[A]),?N | action(As,Sep)].
+    [Sep,"// ",io_lib:format("~p;",[A]) | action(As,Sep)].
 
 arglist([], _Pre, _Sep, _Del) -> [];
 arglist([A], Pre, _Sep, _Del) -> [Pre,A];

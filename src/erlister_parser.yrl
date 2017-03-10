@@ -23,8 +23,7 @@ Nonterminals
         action action_decls action_decl action_stmts action_stmt
         formula
         identifier_list
-        argument_list
-        argument
+        expr expr_list
         number
         type opt_type
         comp arith
@@ -172,26 +171,27 @@ action_decls -> '$empty' : [].
 action_decls -> action_decl ';' action_decls : ['$1'|'$3'].
 
 action_decl -> type identifier : 
-		   {decl,line('$1'),'$1','$2',undefined}.
+		   {decl,line('$2'),'$1','$2',undefined}.
 action_decl -> type identifier '=' formula :
-		   {decl,line('$1'),'$1','$2','$4'}.
+		   {decl,line('$2'),'$1','$2','$4'}.
 
 action_stmts -> '$empty' : [].
 action_stmts -> action_stmt ';' action_stmts : ['$1'|'$3'].
 
 action_stmt -> identifier '=' formula :
 		   {store,line('$1'),'$1','$3'}.
-action_stmt -> identifier '(' argument_list ')' : 
+action_stmt -> identifier '(' expr_list ')' : 
 		   {call,line('$1'),'$1','$3'}.
 
 identifier_list -> identifier : ['$1'].
 identifier_list -> identifier ',' identifier_list : ['$1'|'$3'].
 
-argument_list -> argument : ['$1'].
-argument_list -> argument ',' argument_list : ['$1'|'$3'].
+expr_list -> '$empty' : [].
+expr_list -> expr : ['$1'].
+expr_list -> expr ',' expr_list : ['$1'|'$3'].
 
-argument -> number : '$1'.
-argument -> identifier : '$1'.
+expr -> arith : '$1'.
+expr -> comp  : '$1'.
 
 opt_type -> type : '$1'.
 opt_type -> '$empty' : boolean.
@@ -207,7 +207,7 @@ type -> integer32  : integer32.
 formula -> true  : '$1'.
 formula -> false : '$1'.
 formula -> arith : '$1'.
-formula -> identifier '(' argument_list ')' :{pred,line('$1'),'$1','$3'}.
+formula -> identifier '(' expr_list ')' :{pred,line('$1'),'$1','$3'}.
 formula -> comp : '$1'.
 formula -> '!' formula : {'!',line('$1'),'$2'}.
 formula -> '(' formula ')' : '$2'.
@@ -229,7 +229,7 @@ comp -> arith '!=' arith : {'!=',line('$1'),'$1','$3'}.
 arith -> number : '$1'.
 arith -> identifier : '$1'.
 arith -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
-arith -> '-' argument :
+arith -> '-' arith :
 	     case '$2' of
 		 {decnum,Ln,Ds} -> {decnum,Ln,[$-|Ds]};
 		 {hexnum,Ln,Ds} -> {hexnum,Ln,[$-|Ds]};
