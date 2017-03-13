@@ -89,7 +89,9 @@ do_emit(Props, Machine) ->
 	    c -> erlister_c_code:code(Machine1);
 	    erl -> erlister_erl_code:code(Machine1);
 	    erlang -> erlister_erl_code:code(Machine1);
-	    chine -> erlister_chine_code:code(Machine1)
+	    chine -> erlister_chine_code:code(Machine1);
+	    gv -> erlister_dot_code:code(Machine1);
+	    dot -> erlister_dot_code:code(Machine1)
 	end,
     case proplists:get_value(output, Props) of
 	undefined ->
