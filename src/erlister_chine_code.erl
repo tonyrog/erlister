@@ -23,7 +23,7 @@ code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      declare(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      init(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
      final(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[]),
-     main(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[])
+     run(ID,IN,DEF,OUT,STATES,TRANS,CLOCKS,[])
     ];
 code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
 	      submachines=SUBMACHINES,
@@ -34,7 +34,7 @@ code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      declare(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      init(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
      final(ID,IN,DEF,OUT,[],[],CLOCKS,Ms),
-     main(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
+     run(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
 declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
@@ -42,6 +42,8 @@ declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
      {enum,[ID | [M#machine.name || M <- MACHINES]]},
      enum_state(ID,STATES),
      [ enum_state(M#machine.name, M#machine.states) || M <- MACHINES ]
+     %% FIXME: add enumeration of all timers
+     %%        add enumeration of all internal output
     ].
 
 final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
@@ -82,32 +84,32 @@ init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
      exit
     ].
 
-main(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
+run(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
     [
-     {label, main},
+     {label, run},
      [ begin 
 	   put({def,fid(ID,Name)},Expr),
-	   [formula(ID,def,Expr),{def,id([ID,Name])},'!'] 
+	   [expr(ID,def,Expr),{def,id([ID,Name])},'!'] 
        end ||
 	 #var{id=Name,expr=Expr} <- DEF,Expr =/= undefined ],
      [ begin
 	   Mid = M#machine.name,
 	   [ [ begin 
-		   [{def,formula(ID,in,Pred),id([Mid,Name])},'!'] 
+		   [{def,expr(ID,in,Pred),id([Mid,Name])},'!'] 
 	       end || 
 		 #var{id=Name,expr=Pred} <- M#machine.in,Pred =/= undefined],
 	     [begin
 		  put({def,fid(Mid,Name)},Expr),
-		  [{def,formula(ID,def,Expr),id([Mid,Name])},'!']
+		  [{def,expr(ID,def,Expr),id([Mid,Name])},'!']
 	      end || 
 		 #var{id=Name,expr=Expr} <- M#machine.def,Expr =/= undefined],
 	     code_trans(Mid, M#machine.trans),
-	     [ [formula(Mid,out,Sat),{output,id([Mid,Name])},'!'] || 
+	     [ [expr(Mid,out,Sat),{output,id([Mid,Name])},'!'] || 
 		 #var{id=Name,expr=Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
      code_trans(ID, TRANS),
-     [ [formula(ID,out,Sat),{output,id([ID,Name])},'!'] ||
+     [ [expr(ID,out,Sat),{output,id([ID,Name])},'!'] ||
 	 #var{id=Name,expr=Sat} <- OUT,Sat =/= undefined],
      exit
     ].
@@ -130,7 +132,7 @@ code_from_group(ID, []) ->
 code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start,Action} | ToGroup]) ->
     Set1 = select(ID,Set,Cond),
     Acc1 = [[{label,id([ID,From,I])},
-	     formula(ID,trans,Cond),
+	     expr(ID,trans,Cond),
 	     {jmpz,id([ID,From,I+1])},
 	     {const,id([ID,To])},{const,ID},'!',
 	     tlist(ID,Start),
@@ -148,7 +150,7 @@ code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
 	     [[{const,id([ID,I])},select_input] || I <- ordsets:to_list(ISet)],
 	     [[{const,id([ID,T])},select_timer] || T <- ordsets:to_list(TSet)],
 	     yield,
-	     {jmp,main}
+	     {jmp,run}
 	    ] | Acc],
     lists:reverse(Acc1).
      
@@ -196,64 +198,61 @@ tlist(_ID,[]) -> [];
 tlist(ID,[{T,_Ln}|Ts]) ->
     [{const,id([ID,T])},timer_start | tlist(ID,Ts)].
 
-%% formula(SELF,in,Name,undefined) -> {input,fid(SELF,Name)};%
-% formula(SELF,Class,_Name,F) -> formula(SELF,Class,F).
-
-formula(_SELF,_Class,{const,true})    -> [{const,1}];
-formula(_SELF,_Class,{const,false})   -> [{const,0}];
-formula(_SELF,_Class,{const,C})       -> [{const,C}];
-formula(SELF,_Class,{in,ID,Type})     -> 
+expr(_SELF,_Class,{const,true})    -> [{const,1}];
+expr(_SELF,_Class,{const,false})   -> [{const,0}];
+expr(_SELF,_Class,{const,C})       -> [{const,C}];
+expr(SELF,_Class,{in,ID,Type})     ->
     [{const,fid(SELF,ID)},{const,Type},'input@'];
-formula(SELF,_Class,{param,ID,_Index,_Type})  ->
-    [{const,fid(SELF,ID)},'param@'];
-formula(SELF,_Class,{out1,ID,Type}) ->
+expr(_SELF,_Class,{param,_ID,Index,_Type})  ->
+    [{const,Index},{const,0},'param_fetch'];
+expr(SELF,_Class,{out1,ID,Type}) ->
     [{const,fid(SELF,ID)},{const,Type},'output1@'];
-formula(SELF,_Class,{out,ID,Type})    ->
+expr(SELF,_Class,{out,ID,Type})    ->
     [{const,fid(SELF,ID)},{const,Type},'output!'];
-formula(SELF,_Class,{def,ID,_Type})   ->
+expr(SELF,_Class,{def,ID,_Type})   ->
     [{def,fid(SELF,ID)},'@'];
-formula(SELF,_Class,{state,ID})       ->
+expr(SELF,_Class,{state,ID})       ->
     [{const,mid(SELF,ID)},'@',{const,fid(SELF,ID)},'='];
-formula(SELF,_Class,{timeout,ID})     ->
+expr(SELF,_Class,{timeout,ID})     ->
     [{const,fid(SELF,ID)},timer_timeout];
-formula(SELF,Class,{'?',C,T,E}) ->
-    [formula(SELF,Class,C),{'if',formula(SELF,Class,T),formula(SELF,Class,E)}];
-formula(SELF,Class,{'&&',L,R}) ->
-    [formula(SELF,Class,L), dup,
-     {'if', [drop, formula(SELF,Class,R)]}];
-formula(SELF,Class,{'||',L,R}) ->
-    [formula(SELF,Class,L), dup, 'not',
-     {'if', [drop, formula(SELF,Class,R)]}];
-formula(SELF,Class,{'->',L,R}) ->
-    [formula(SELF,Class,L), dup, '0=', 
-     {'if', [drop, formula(SELF,Class,R)]}];
-formula(S,C,{'<->',L,R}) ->
-    [formula(S,C,L), formula(S,C,R), '='];
-formula(S,C,{'<',L,R}) ->
-    [formula(S,C,L),formula(S,C,R),'<'];
-formula(S,C,{'<=',L,R}) ->
-    [formula(S,C,L),formula(S,C,R),'<='];
-formula(S,C,{'>',L,R}) ->
-    [formula(S,C,R),formula(S,C,L),'<'];
-formula(S,C,{'>=',L,R}) ->
-    [formula(S,C,R),formula(S,C,L),'<='];
-formula(S,C,{'==',L,R}) ->
-    [formula(S,C,L),formula(S,C,R),'='];
-formula(S,C,{'!=',L,R}) ->
-    [formula(S,C,L),formula(S,C,R),'=','not'];
-formula(S,C,{'+',L,R}) -> [formula(S,C,L),formula(S,C,R),'+'];
-formula(S,C,{'-',L,R}) -> [formula(S,C,L),formula(S,C,R),'-'];
-formula(S,C,{'*',L,R}) -> [formula(S,C,L),formula(S,C,R),'*'];
-formula(S,C,{'/',L,R}) -> [formula(S,C,L),formula(S,C,R),'/'];
-formula(S,C,{'%',L,R}) -> [formula(S,C,L),formula(S,C,R),'mod'];
-formula(S,C,{'&',L,R}) -> [formula(S,C,L),formula(S,C,R),'and'];
-formula(S,C,{'|',L,R}) -> [formula(S,C,L),formula(S,C,R),'or'];
-formula(S,C,{'^',L,R}) -> [formula(S,C,L),formula(S,C,R),'xor'];
-formula(S,C,{'<<',L,R}) -> [formula(S,C,L),formula(S,C,R),lshift];
-formula(S,C,{'>>',L,R}) -> [formula(S,C,L),formula(S,C,R),arshift];
-formula(S,C,{'-',F}) -> [formula(S,C,F),negate];
-formula(S,C,{'~',F}) -> [formula(S,C,F),invert];
-formula(S,C,{'!',F}) -> [formula(S,C,F),'not'].
+expr(SELF,Class,{'?',C,T,E}) ->
+    [expr(SELF,Class,C),{'if',expr(SELF,Class,T),expr(SELF,Class,E)}];
+expr(SELF,Class,{'&&',L,R}) ->
+    [expr(SELF,Class,L), dup,
+     {'if', [drop, expr(SELF,Class,R)]}];
+expr(SELF,Class,{'||',L,R}) ->
+    [expr(SELF,Class,L), dup, 'not',
+     {'if', [drop, expr(SELF,Class,R)]}];
+expr(SELF,Class,{'->',L,R}) ->
+    [expr(SELF,Class,L), dup, '0=', 
+     {'if', [drop, expr(SELF,Class,R)]}];
+expr(S,C,{'<->',L,R}) ->
+    [expr(S,C,L), expr(S,C,R), '='];
+expr(S,C,{'<',L,R}) ->
+    [expr(S,C,L),expr(S,C,R),'<'];
+expr(S,C,{'<=',L,R}) ->
+    [expr(S,C,L),expr(S,C,R),'<='];
+expr(S,C,{'>',L,R}) ->
+    [expr(S,C,R),expr(S,C,L),'<'];
+expr(S,C,{'>=',L,R}) ->
+    [expr(S,C,R),expr(S,C,L),'<='];
+expr(S,C,{'==',L,R}) ->
+    [expr(S,C,L),expr(S,C,R),'='];
+expr(S,C,{'!=',L,R}) ->
+    [expr(S,C,L),expr(S,C,R),'=','not'];
+expr(S,C,{'+',L,R}) -> [expr(S,C,L),expr(S,C,R),'+'];
+expr(S,C,{'-',L,R}) -> [expr(S,C,L),expr(S,C,R),'-'];
+expr(S,C,{'*',L,R}) -> [expr(S,C,L),expr(S,C,R),'*'];
+expr(S,C,{'/',L,R}) -> [expr(S,C,L),expr(S,C,R),'/'];
+expr(S,C,{'%',L,R}) -> [expr(S,C,L),expr(S,C,R),'mod'];
+expr(S,C,{'&',L,R}) -> [expr(S,C,L),expr(S,C,R),'and'];
+expr(S,C,{'|',L,R}) -> [expr(S,C,L),expr(S,C,R),'or'];
+expr(S,C,{'^',L,R}) -> [expr(S,C,L),expr(S,C,R),'xor'];
+expr(S,C,{'<<',L,R}) -> [expr(S,C,L),expr(S,C,R),lshift];
+expr(S,C,{'>>',L,R}) -> [expr(S,C,L),expr(S,C,R),arshift];
+expr(S,C,{'-',F}) -> [expr(S,C,F),negate];
+expr(S,C,{'~',F}) -> [expr(S,C,F),invert];
+expr(S,C,{'!',F}) -> [expr(S,C,F),'not'].
 
 
 %% calculate selection set for inputs and timers
@@ -275,7 +274,6 @@ select(SELF,Set,{Op,L,R}) when is_atom(Op) ->
     select(SELF,select(SELF,Set,L),R);
 select(SELF,Set,{Op,F}) when is_atom(Op) ->
     select(SELF,Set,F).
-
 
 mid(_SELF,[ID,".",_FLD]) -> ID;
 mid(SELF, _) -> SELF.
