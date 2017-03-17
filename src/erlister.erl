@@ -14,6 +14,7 @@
 options() ->
     [ {lang,$l,"lang", {atom,c}, "output language" },
       {output,$o,"output-file", string, "output file name"},
+      {debug,$d,"debug", undefined, "debug output"},
       {version,$v,"version", undefined, "application version"},
       {help,$h,"help", undefined, "this help"}
     ].
@@ -24,8 +25,8 @@ start() ->
 start(Args) ->
     application:load(erlister),
     case getopt:parse(options(), Args) of
-	{ok,{Props,[]}} ->
-	    case lists:member(help,Props) of
+	{ok,{Opts,[]}} ->
+	    case lists:member(help,Opts) of
 		true ->
 		    getopt:usage(options(), "erlister"),
 		    halt(0);
@@ -33,8 +34,8 @@ start(Args) ->
 		    io:format("~s: missing input file\n", ["erlister"]),
 		    halt(1)
 	    end;
-	{ok,{Props,[File]}} ->
-	    do_input(Props, File);
+	{ok,{Opts,[File]}} ->
+	    do_input(Opts, File);
 	{error,Error} ->
 	    io:format("~s\n", 
 		      [getopt:format_error(options(),Error)]),
@@ -42,7 +43,7 @@ start(Args) ->
 	    halt(1)
     end.
 
-do_input(Props, File) ->
+do_input(Opts, File) ->
     case file:read_file(File) of
 	{ok,Bin} ->
 	    case erlister_scan:string(binary_to_list(Bin)) of
@@ -54,12 +55,13 @@ do_input(Props, File) ->
 				      [File,Ln,
 				       apply(Mod,format_error,[Message])]),
 			    halt(1);
-			{ok,Machine} ->
-			    %% io:format("machine ~p\n", [Machine]),
-			    case erlister_lint:machine(Machine) of
-				{Machine1,[]} ->
-				    do_emit(Props, Machine1);
-				{_Machine1,ERR} ->
+			{ok,M0} ->
+			    debugf(Opts,"parse:machine ~p\n", [M0]),
+			    case erlister_lint:machine(M0) of
+				{M1,[]} ->
+				    do_emit(Opts, M1);
+				{M1,ERR} ->
+				    debugf(Opts,"lint:machine: ~p\n",[M1]),
 				    lists:foreach(
 				      fun({Ln,Mod,Message}) ->
 					      io:format("~s:~w: ~s\n", 
@@ -68,7 +70,6 @@ do_input(Props, File) ->
 							       format_error,
 							       [Message])])
 				      end, lists:keysort(1,ERR)),
-				    %% io:format("machine' ~p\n", [Machine1]),
 				    halt(1)
 			    end
 		    end;
@@ -81,23 +82,32 @@ do_input(Props, File) ->
 	    halt(1)
     end.
 
-do_emit(Props, Machine) ->
-    Machine1 = erlister_eval:machine(Machine),
-    %% io:format("machine' ~p\n", [Machine1]),
+do_emit(Opts, M) ->
+    debugf(Opts,"lint:machine: ~p\n",[M]),
+    M1 = erlister_eval:machine(M),
+    %% debugf(Opts,"lint:eval: ~p\n",[M1]),
     Code =
-	case proplists:get_value(lang,Props,c) of
-	    c -> erlister_c_code:code(Machine1);
-	    erl -> erlister_erl_code:code(Machine1);
-	    erlang -> erlister_erl_code:code(Machine1);
-	    chine -> erlister_chine_code:code(Machine1);
-	    gv -> erlister_dot_code:code(Machine1);
-	    dot -> erlister_dot_code:code(Machine1)
+	case proplists:get_value(lang,Opts,c) of
+	    c -> erlister_c_code:code(M1);
+	    erl -> erlister_erl_code:code(M);
+	    erlang -> erlister_erl_code:code(M1);
+	    chine -> erlister_chine_code:code(M1);
+	    gv -> erlister_dot_code:code(M1);
+	    dot -> erlister_dot_code:code(M1)
 	end,
-    case proplists:get_value(output, Props) of
+    case proplists:get_value(output,Opts) of
 	undefined ->
 	    io:put_chars([Code]),
 	    halt(0);
 	File ->
 	    file:write_file(File, Code),
 	    halt(0)
+    end.
+
+debugf(Opts,Fmt,As) ->
+    case lists:member(debug, Opts) of
+	true ->
+	    io:format(Fmt, As);
+	false ->
+	    ok
     end.
