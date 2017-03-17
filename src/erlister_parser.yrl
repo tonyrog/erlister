@@ -23,6 +23,7 @@ Nonterminals
         action action_decls action_decl action_stmts action_stmt
         formula
         identifier_list
+        field
         expr expr_list
         number
         type opt_type
@@ -183,6 +184,9 @@ action_stmt -> identifier '=' formula :
 action_stmt -> identifier '(' expr_list ')' : 
 		   {call,line('$1'),'$1','$3'}.
 
+field -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
+    
+
 identifier_list -> identifier : ['$1'].
 identifier_list -> identifier ',' identifier_list : ['$1'|'$3'].
 
@@ -207,11 +211,12 @@ type -> integer32  : integer32.
 formula -> true  : '$1'.
 formula -> false : '$1'.
 formula -> arith : '$1'.
-formula -> identifier '(' expr_list ')' :{pred,line('$1'),'$1','$3'}.
+formula -> identifier '(' expr_list ')' :{call,line('$1'),'$1','$3'}.
 formula -> comp : '$1'.
 formula -> '!' formula : {'!',line('$1'),'$2'}.
 formula -> '(' formula ')' : '$2'.
 formula -> 'timeout' '(' identifier ')' : {timeout,line('$1'),'$3'}.
+formula -> 'timeout' '(' field ')' : {timeout,line('$1'),'$3'}.
 formula -> formula '&&' formula : {'&&',line('$2'),'$1','$3'}.
 formula -> formula '||' formula : {'||',line('$2'),'$1','$3'}.
 formula -> formula '->' formula : {'->',line('$2'),'$1','$3'}.
@@ -228,7 +233,7 @@ comp -> arith '!=' arith : {'!=',line('$1'),'$1','$3'}.
 
 arith -> number : '$1'.
 arith -> identifier : '$1'.
-arith -> identifier '.' identifier : {field,line('$2'),'$1','$3'}.
+arith -> field : '$1'.
 arith -> '-' arith :
 	     case '$2' of
 		 {decnum,Ln,Ds} -> {decnum,Ln,[$-|Ds]};

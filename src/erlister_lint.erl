@@ -9,6 +9,7 @@
 
 -export([machine/1]).
 -export([format_error/1]).
+-export([find_signature/1]).
 
 -include("../include/erlister.hrl").
 
@@ -72,9 +73,10 @@ lint_submachine_list_0([],Acc,_SUBMACHINES,Es) ->
     {Acc,Es}.
 
 %% For each submachine export,
-%% output and state as ID.outi and ID.state1
+%% output,state and clocks as ID.outi,ID.state1,ID.clock
+%% 
 
-export_submachines([{submachine0,_Ln,ID,_IN,_PAR,_DEF,OUT,_CLOCKS,
+export_submachines([{submachine0,_Ln,ID,_IN,_PAR,_DEF,OUT,CLOCKS,
 		     STATES,_Trans,_Sym}|Ms],Sym) ->
     Sym1 = lists:foldl(
 	     fun(V=#var{id=Out},Si) -> 
@@ -84,14 +86,18 @@ export_submachines([{submachine0,_Ln,ID,_IN,_PAR,_DEF,OUT,_CLOCKS,
 	     fun(S=#state{id=State},Si) ->
 		     maps:put([ID,".",State],S,Si)
 	     end, Sym1, STATES),
-    export_submachines(Ms, Sym2);
+    Sym3 = lists:foldl(
+	     fun(C=#clock{id=Clock},Si) ->
+		     maps:put([ID,".",Clock],C,Si)
+	     end, Sym2, CLOCKS),
+    export_submachines(Ms, Sym3);
 export_submachines([],Sym) ->
     Sym.
 
 lint_submachine_list([{submachine0,Ln,ID,IN1,PAR1,DEF1,OUT1,CLOCK1,
 		       STATE,Trans,Sym0}|Ms],Acc,Sym,SUBMACHINES,Es) ->
     %% merge "global" symbols with locals, should remove self! maybe ok?
-    Sym1 = maps:merge(Sym0,Sym),
+    Sym1 = maps:merge(Sym,Sym0),
     {IN2,Es1} = lint_in(IN1,[],Sym1,ID,SUBMACHINES,Es),
     {PAR2,Es11} = lint_param(PAR1,[],Sym1,Es1),
     {DEF2,Es2} = lint_def(DEF1,[],Sym1,Es11),
@@ -249,8 +255,14 @@ lint_out_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
 %% Check input
-lint_in([V=#var{expr=undefined}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
-    lint_in(Xs,[V|Acc],Sym,Mid,SUBMACHINES,Es0);
+lint_in([V=#var{id=ID,line=Ln,expr=undefined}|Xs],Acc,Sym,Mid,
+	SUBMACHINES,Es0) ->
+    if SUBMACHINES =/= [] ->
+	    E = {Ln,?MODULE,["input ",ID," must have a definition"]},
+	    lint_in(Xs,[V|Acc],Sym,Mid,SUBMACHINES,[E|Es0]);
+       true ->
+	    lint_in(Xs,[V|Acc],Sym,Mid,SUBMACHINES,Es0)
+    end;
 lint_in([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
     {Expr1,Es1} = 
 	expr(Expr,in,V#var.type,
@@ -260,9 +272,9 @@ lint_in([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
 		 Lookup(I={field,_Ln,_,_},_Vs,Es)->
 		     %% submachine out or state
 		     lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
-		 Lookup({pred,_Ln,{identifier,_,P},Args},Vs,Es) ->
+		 Lookup({call,_Ln,{identifier,_,P},Args},Vs,Es) ->
 		     {As,Es1} = pred_args(Args,[],Lookup,Vs,Es),
-		     {{pred,P,As},Es1};
+		     {{call,P,As},Es1};
 		 Lookup({timeout,Ln1,{identifier,_Ln,TID}},_Vs,Es) ->
 		     E = {Ln1,?MODULE,["timeout(",TID,")"
 				       " can not be used in this section"]},
@@ -305,12 +317,12 @@ lint_out([V=#var{expr=Expr}|Xs],Acc,Sym,Mid,SUBMACHINES,Es0) ->
 		(I={field,_Ln,_,_},_Vs,Es) ->
 		     %% sibling STATE,OUT?
 		     lint_out_or_state_variable(I,Sym,Mid,SUBMACHINES,Es);
-		({pred,Ln,{identifier,_,P},Args},_Vs,Es) ->
+		({call,Ln,{identifier,_,P},Args},_Vs,Es) ->
 		     E = {Ln,?MODULE,["predicate ",P,
 				      " is not allowed in this section"]},
-		     {{pred,P,Args},[E|Es]};
+		     {{call,P,Args},[E|Es]};
 		({timeout,_Ln,{identifier,Ln,ID}},_Vs,Es) ->
-		     lint_timeout_(ID,Ln,Sym,Es)
+		     lint_timeout_(ID,Ln,Sym,Mid,SUBMACHINES,Es)
 	     end, [], Es0),
     lint_out(Xs,[V#var{expr=Expr1}|Acc],Sym,Mid,SUBMACHINES,Es1);
 lint_out([],Acc,_Sym,_Mid,_SUBMACHINES,Es) ->
@@ -322,10 +334,10 @@ lint_dsat(Form,Type,Sym,Es0) ->
 		 lint_in_def_variable_(ID,Ln,Sym,Es);
 	    (I={field,_Ln,_,_},_Vs,Es) ->
 		 lint_in_variable(I,Sym,Es);
-	    ({pred,Ln,{identifier,_,P},Args},_Vs,Es) ->
+	    ({call,Ln,{identifier,_,P},Args},_Vs,Es) ->
 		 E = {Ln,?MODULE,["predicate ",P,
 				  " is not allowed in this section"]},
-		 {{pred,P,Args},[E|Es]};
+		 {{call,P,Args},[E|Es]};
 	    ({timeout,Ln,{identifier,_Ln,ID}},_Vs,Es) ->
 		 E = {Ln,?MODULE,["timeout(",ID,")"
 				  " can not be used in def section"]},
@@ -435,19 +447,20 @@ lint_action_expr(Expr,Type,Sym,Es0) ->
 	    ({field,Ln,{identifier,_,OBJ},{identifier,_,ID}},_Vs,Es)->
 		 E = {Ln,?MODULE,["variable ",OBJ,".",ID,
 				  " can not be used in trans section"]},
-		 {{in,[OBJ,".",ID]},[E|Es]};
-	    ({pred,Ln,{identifier,_,P},Args},_Vs,Es) ->
+		 {{in,[OBJ,".",ID],boolean},[E|Es]};
+	    ({call,Ln,{identifier,_,Func},Args},_Vs,Es) ->
 		 %% pretend that pred are call for now
-		 lint_call(P,Ln,Args,Sym,Es);
+		 lint_call(Func,Ln,Args,Sym,Es);
 	    ({timeout,Ln1,{identifier,_Ln,TID}},_Vs,Es) ->
 		 E = {Ln1,?MODULE,["timeout(",TID,")"
 				   " can not be used in this section"]},
 		 {{timeout,TID},[E|Es]}
 	 end,[],Es0).
 
-
-find_signature("param_fetch") -> {integer32,'param@',[unsigend16,unsigned8]};
-find_signature("param_store") -> {void,'param!',[unsigend16,unsigned8,integer32]};
+find_signature(A) when is_atom(A) ->
+    find_signature(atom_to_list(A));
+find_signature("param_fetch") -> {integer32,param_fetch,[unsigend16,unsigned8]};
+find_signature("param_store") -> {void,param_store,[unsigend16,unsigned8,integer32]};
 find_signature("uart_send")   -> {void,uart_send,[integer8]};
 find_signature("uart_recv")   -> {integer8,uart_recv,[]};
 find_signature("uart_avail")  -> {boolean,uart_avail,[]};
@@ -474,11 +487,11 @@ lint_tsat(Form,Sym,Es0) ->
 	 fun({identifier,Ln,ID},_Vs,Es) ->
 		 lint_in_def_variable_(ID,Ln,Sym,Es);
 	    ({timeout,_Ln,{identifier,Ln,ID}},_Vs,Es) ->
-		 lint_timeout_(ID,Ln,Sym,Es);
-	    ({pred,Ln,{identifier,_,P},Args},_Vs,Es) ->
+		 lint_timeout_(ID,Ln,Sym,"",[],Es);
+	    ({call,Ln,{identifier,_,P},Args},_Vs,Es) ->
 		 E = {Ln,?MODULE,["predicate ",P,
 				  " is not allowed in this section"]},
-		 {{pred,P,Args},[E|Es]};
+		 {{call,P,Args},[E|Es]};
 	    ({field,Ln,{identifier,_Ln1,OBJ},{identifier,_Ln2,ID}},_Vs,Es) ->
 		 E = {Ln,?MODULE,["variable ",OBJ,".",ID,
 				  " can not be used in trans section"]},
@@ -496,7 +509,6 @@ lint_local_variable({identifier,Ln,ID},Sym,Es) ->
 	    E = {Ln,?MODULE,["variable ", ID, " must be a local variable"]},
 	    {{var,ID,Type},[E|Es]}
     end.
-
 
 lint_in_variable({identifier,Ln,ID},Sym,Es) ->
     lint_in_variable_(ID,Ln,Sym,Es);
@@ -574,12 +586,26 @@ lint_in_def_variable_(ID,Ln,Sym,Es) ->
 	    {{in,ID,boolean},[E|Es]}
     end.
 
-lint_timeout_(ID,Ln,Sym,Es) ->
-    case maps:find(ID, Sym) of
-	{ok,#clock{}} -> {{timeout,ID},Es};
+lint_timeout_(T=[_OBJ,".",_ID],Ln,Sym,_ID,[],Es) ->
+    %% access to submachine timeout
+    case maps:find(T, Sym) of
+	{ok,#clock{}} ->
+	    {{timeout,T},Es};
 	_ ->
-	    E = {Ln,?MODULE,["variable ", ID, " must be a clock"]},
-	    {{timeout,ID},[E|Es]}
+	    E = {Ln,?MODULE,["variable ", T, " must be a clock"]},
+	    {{timeout,T},[E|Es]}
+    end;
+lint_timeout_(T=[_OBJ,".",_ID],Ln,_Sym,_Mid,SUBMACHINES,Es) when
+      SUBMACHINES =/= [] ->
+    E = {Ln,?MODULE,["can not refer to ", T, " from submachine"]},
+    {{timeout,T},[E|Es]};
+lint_timeout_(T,Ln,Sym,_Mid,_SUBMACHINES,Es) ->
+    case maps:find(T, Sym) of
+	{ok,#clock{}} -> 
+	    {{timeout,T},Es};
+	_ ->
+	    E = {Ln,?MODULE,["variable ", T, " must be a clock"]},
+	    {{timeout,T},[E|Es]}
     end.
 
 %%
@@ -587,13 +613,17 @@ lint_timeout_(ID,Ln,Sym,Es) ->
 %% Class = in|out|def(|trans)
 %% Type  = boolean|unsigned|integer
 %%
-expr(I={identifier,_Ln,_ID},_Class,_Type,Lookup,Vs,Es) ->
-    Lookup(I,Vs,Es);
-expr(I={field,_Ln,_OBJ,_ID},_Class,_Type,Lookup,Vs,Es) ->
-    Lookup(I,Vs,Es);
+expr(I={identifier,Ln,_ID},_Class,Type,Lookup,Vs,Es) ->
+    type_check(Ln,Lookup(I,Vs,Es),Type);
+expr(I={field,Ln,_OBJ,_ID},_Class,Type,Lookup,Vs,Es) ->
+    type_check(Ln,Lookup(I,Vs,Es),Type);
 expr(I={timeout,_Ln,{identifier,_Ln,_ID}},_Class,_Type,Lookup,Vs,Es) ->
     Lookup(I,Vs,Es);
-expr(P={pred,_Ln,{identifier,_,_ID},_Args},_Class,_Type,Lookup,Vs,Es) ->
+expr({timeout,Ln,
+      {field,_Ln,{identifier,_,OBJ},{identifier,_,ID}}},
+     _Class,_Type,Lookup,Vs,Es) ->
+    Lookup({timeout,Ln,{identifier,Ln,[OBJ,".",ID]}},Vs,Es);
+expr(P={call,_Ln,{identifier,_,_ID},_Args},_Class,_Type,Lookup,Vs,Es) ->
     Lookup(P,Vs,Es);
 expr({true,Ln},_Class,Type,_Lookup,_Vs,Es) ->
     if Type =/= boolean ->
@@ -607,7 +637,7 @@ expr({false,Ln},_Class,Type,_Lookup,_Vs,Es) ->
        true ->
 	    {{const,false},Es}
     end;
-expr({decnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
+expr({decnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) ->
     const(list_to_integer(Ds,10),Ln,Type,Es);
 expr({hexnum,Ln,Ds},_Class,Type,_Lookup,_Vs,Es) -> 
     const(list_to_integer(Ds,16),Ln,Type,Es);
@@ -656,12 +686,19 @@ expr({'?',_Ln,C,T,E},Class,Type,Lookup,Vs,Es) ->
     {T1,Es2} = expr(T,Class,Type,Lookup,Vs,Es1),
     {E1,Es3} = expr(E,Class,Type,Lookup,Vs,Es2),
     {{'?',C1,T1,E1},Es3};
-expr({Op,_Ln,L,R},Class,_Type,Lookup,Vs,Es) when 
+expr({Op,Ln,L,R},Class,Type,Lookup,Vs,Es) when 
       Op =:= '+'; Op =:= '-'; Op =:= '*'; Op =:= '/'; Op =:= '%' ->
-    %% assert Type == unsigned|integer
-    {L1,Es1} = expr(L,Class,integer,Lookup,Vs,Es),
-    {R1,Es2} = expr(R,Class,integer,Lookup,Vs,Es1),
-    {{Op,L1,R1},Es2};
+    Es1 = case is_integer_type(Type) of
+	      false ->
+		  E = {Ln,?MODULE,["operator ", atom_to_list(Op), 
+				   "not expected"]},
+		  [E|Es];
+	      true ->
+		  Es
+	  end,
+    {L1,Es2} = expr(L,Class,integer,Lookup,Vs,Es1),
+    {R1,Es3} = expr(R,Class,integer,Lookup,Vs,Es2),
+    {{Op,L1,R1},Es3};
 expr({Op,_Ln,M},Class,_Type,Lookup,Vs,Es) when 
       Op =:= '-' ->
     %% assert Type == unsigned|integer
@@ -699,7 +736,33 @@ const(Const,Ln,integer32,Es) when Const < -16#80000000; Const > 16#7fffffff ->
      [{Ln,?MODULE,["constant not in integer32 range"]}|Es]};
 const(Const,_Ln,_Type,Es) ->
     {{const,Const}, Es}.
-    
+
+
+type_check(Ln,{V={param,Var,_Index,Type1},Es}, Type2) ->
+    type_check_(Ln,V,Var,Type1,Type2, Es);
+type_check(Ln,{V={_Class,Var,Type1},Es}, Type2) ->
+    type_check_(Ln,V,Var,Type1,Type2, Es);
+type_check(Ln,R={S={state,_State},Es},Type) ->
+    if Type =:= boolean ->
+	    R;
+       true ->
+	    E = {Ln,?MODULE,["state is of type boolean"]},
+	    {S,[E|Es]}
+    end.
+
+type_check_(_Ln,V,_Var,Type,Type,Es) ->
+    {V,Es};
+type_check_(Ln,V,Var,Type1,Type2,Es) ->
+    case is_integer_type(Type1) andalso is_integer_type(Type2) of
+	true ->
+	    {V,Es};
+	false ->
+	    E = {Ln,?MODULE,["variable ", Var, " is not of type ",
+			     atom_to_list(Type2),
+			     " it is of type ", atom_to_list(Type1)]},
+	    {V,[E|Es]}
+    end.
+
 pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
     {F1,Es1} = case F of
 		   {identifier,_Ln,X} ->
@@ -718,6 +781,21 @@ pred_args([F|Fs],Acc,Lookup,Vs,Es) ->
     pred_args(Fs,[F1|Acc],Lookup,Vs,Es1);
 pred_args([],Acc,_Lookup,_Vs,Es) ->
     {lists:reverse(Acc),Es}.
+
+is_integer_type(unsigned8) -> true;
+is_integer_type(unsigned16) -> true;
+is_integer_type(unsigned32) -> true;
+is_integer_type(integer8) -> true;
+is_integer_type(integer16) -> true;
+is_integer_type(integer32) -> true;
+is_integer_type(integer) -> true;
+is_integer_type(_) -> false.
+
+is_signed_type(integer8) -> true;
+is_signed_type(integer16) -> true;
+is_signed_type(integer32) -> true;
+is_signed_type(integer) -> true;
+is_signed_type(_) -> false.
 
 get_number({decnum,_Ln,Ds}) -> list_to_integer(Ds,10);
 get_number({hexnum,_Ln,[$0,$x|Ds]}) -> list_to_integer(Ds,16);
