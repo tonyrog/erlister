@@ -37,17 +37,25 @@ code_(#machine{name=ID,in=IN,def=DEF,out=OUT,clocks=CLOCKS,
      run(ID,IN,DEF,OUT,[],[],CLOCKS,Ms)
     ].
 
-declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,_CLOCKS,MACHINES) ->
+declare(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
+    TList = [id([ID,T]) || #clock{id=T} <- CLOCKS],
+    TMList = [[id([M#machine.name,T]) ||
+		  #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
+    TimerList = TList ++ lists:append(TMList),
     [
      {enum,[ID | [M#machine.name || M <- MACHINES]]},
      enum_state(ID,STATES),
-     [ enum_state(M#machine.name, M#machine.states) || M <- MACHINES ]
-     %% FIXME: add enumeration of all timers
-     %%        add enumeration of all internal output
+     [ enum_state(M#machine.name, M#machine.states) || M <- MACHINES ],
+     
+     %% enumerate all timer to give them uniq numbers
+     {enum,TimerList}
+
+     %% FIXME: add enumeration of all internal output
     ].
 
 final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
     [
+     {export,final},
      {label,final},
      [ [[{const,id([M#machine.name,T])},timer_stop] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES ],
@@ -57,15 +65,8 @@ final(ID,_IN,_DEF,_OUT,_STATES,_TRANS,CLOCKS,MACHINES) ->
 
 init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
     [
+     {export,init},
      {label,init},
-     
-     %% enumerate all timer to give them uniq numbers
-     {enum,[E||
-	       {E} <-
-		   lists:flatten(
-		     [ [[{id([M#machine.name,T])}] ||
-			   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
-		     [[{id([ID,T])}] || #clock{id=T} <- CLOCKS])]},
 
      [ [[{const,id([M#machine.name,T])},timer_init] ||
 	   #clock{id=T} <- M#machine.clocks] || M <- MACHINES],
@@ -84,8 +85,9 @@ init(ID,_IN,_DEF,_OUT,STATES,_TRANS,CLOCKS,MACHINES) ->
      exit
     ].
 
-run(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
+run(ID,_IN,DEF,OUT,STATES,TRANS,_CLOCKS,MACHINES) ->
     [
+     {export, run},
      {label, run},
      [ begin 
 	   put({def,fid(ID,Name)},Expr),
@@ -103,22 +105,23 @@ run(ID,_IN,DEF,OUT,_STATES,TRANS,_CLOCKS,MACHINES) ->
 		  [{def,expr(ID,def,Expr),id([Mid,Name])},'!']
 	      end || 
 		 #var{id=Name,expr=Expr} <- M#machine.def,Expr =/= undefined],
-	     code_trans(Mid, M#machine.trans),
+	     code_trans(Mid, M#machine.trans, M#machine.states),
 	     [ [expr(Mid,out,Sat),{output,id([Mid,Name])},'!'] || 
 		 #var{id=Name,expr=Sat} <- M#machine.out,Sat =/= undefined]
 	   ]
        end || M <- MACHINES],
-     code_trans(ID, TRANS),
+     code_trans(ID, TRANS, STATES),
      [ [expr(ID,out,Sat),{output,id([ID,Name])},'!'] ||
 	 #var{id=Name,expr=Sat} <- OUT,Sat =/= undefined],
      exit
     ].
 
-code_trans(_ID,[]) ->
+code_trans(_ID,[],_STATES) ->
     [];
-code_trans(ID,TRs) ->
+code_trans(ID,TRs,STATES) ->
     GroupTrans = group_trans(TRs),
-    Fs = [{caddr,id([ID,F,1])} || {F,_} <- GroupTrans],
+    Fs = [{caddr,id([ID,S,1])} || #state{id=S} <- STATES],
+    %% Fs = [{caddr,id([ID,F,1])} || {F,_} <- GroupTrans],
     [{array,Fs},{const,ID},'@','[]','jmp*',
      code_from_group(ID, GroupTrans)].
 
@@ -136,8 +139,10 @@ code_to_group(ID, From, I, Set, Acc, [{Cond,To,Start,Action} | ToGroup]) ->
 	     {jmpz,id([ID,From,I+1])},
 	     {const,id([ID,To])},{const,ID},'!',
 	     tlist(ID,Start),
-	     %% FIXME: add actions,
-	     {comment,lists:flatten(io_lib:format("~p",[Action]))},
+	     %% FIXME: declarations
+	     %% FIXME: should we keep call even for sys functions and
+	     %%        built in functions?
+	     [ [Args,Func] || {call,Func,Args} <- Action],
 	     {jmp,id([ID,"out"])}] | Acc],
     code_to_group(ID, From, I+1, Set1, Acc1, ToGroup);
 code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
@@ -147,8 +152,8 @@ code_to_group(ID, From, N, {ISet,TSet}, Acc, []) ->
     %% have the effect that the state machine is executed when either
     %% events trigger
     Acc1 = [[{label,id([ID,From,N])},
-	     [[{const,id([ID,I])},select_input] || I <- ordsets:to_list(ISet)],
-	     [[{const,id([ID,T])},select_timer] || T <- ordsets:to_list(TSet)],
+	     [[{const,I},select_input] || I <- ordsets:to_list(ISet)],
+	     [[{const,T},select_timer] || T <- ordsets:to_list(TSet)],
 	     yield,
 	     {jmp,run}
 	    ] | Acc],
