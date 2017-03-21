@@ -307,10 +307,9 @@ tlist(ID,[{T,_Ln}|Ts],Pre,Sep) ->
     [Pre,"erlister_rt:timer_start(clk_",ID,"_",T,",",Timeout,")",Sep | 
      tlist(ID,Ts,Pre,Sep)].
 
-%% FIXME: implement
 action(_SELF,[],_Pre,_Sep) -> [];
 action(SELF,[A|As],Pre,Sep) ->
-    [Pre,"%% ", action_(SELF,A), Sep |
+    [Pre,action_(SELF,A), Sep |
      action(SELF,As,Pre,Sep)].
 
 action_(_SELF,{decl,#var{id=_Var,type=_Type,expr=undefined}}) ->
@@ -318,7 +317,7 @@ action_(_SELF,{decl,#var{id=_Var,type=_Type,expr=undefined}}) ->
 action_(SELF,{decl,#var{id=Var,type=Type,expr=Expr}}) ->
     [["VAR_",Var]," = ",expr_(SELF,action,Type,Expr),","];
 action_(SELF,{store,#var{id=Var,type=Type},Expr}) -> 
-    %% fixme: update variable
+    %% fixme: update variable!
     [["VAR_",Var]," = ",expr_(SELF,action,Type,Expr),","];
 action_(SELF,{call,Func,Args}) ->
     {_RType,Name,ArgTypes} = erlister_lint:find_signature(Func),

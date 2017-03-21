@@ -53,6 +53,8 @@ timer_read(Name) ->
     end.
 
 %% emit output ...
+output(Old, Old) ->
+    ok;
 output(Old, New) ->
     io:format("transmit output ~w (old = ~w)\n", [New,Old]),
     ok.
