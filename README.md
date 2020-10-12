@@ -1,4 +1,4 @@
-#Erlister
+# Erlister
 
 State machine language heavily inspired by ALISTER.
 
