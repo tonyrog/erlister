@@ -223,7 +223,7 @@ lint_def_0([{Type,{'=',_Ln,{identifier,Ln,ID},Expr}}|Xs],Acc,Sym,Es) ->
 lint_def_0([],Acc,Sym,Es) ->
     {Acc,Sym,Es}.
 
-lint_clock_0([{clock,Ln,{identifier,_Ln,ID},{identifier,_Ln,NAME},
+lint_clock_0([{clock,Ln,{identifier,_Ln1,ID},{identifier,_Ln2,NAME},
 	       {Low,High},Step,Default}|Xs],Acc,Sym,Es) ->
     L = get_number(Low),
     H = get_number(High),
@@ -586,7 +586,7 @@ lint_in_def_variable_(ID,Ln,Sym,Es) ->
 	    {{in,ID,boolean},[E|Es]}
     end.
 
-lint_timeout_(T=[_OBJ,".",_ID],Ln,Sym,_ID,[],Es) ->
+lint_timeout_(T=[_OBJ,".",_ID],Ln,Sym,_ID1,[],Es) ->
     %% access to submachine timeout
     case maps:find(T, Sym) of
 	{ok,#clock{}} ->
@@ -617,7 +617,7 @@ expr(I={identifier,Ln,_ID},_Class,Type,Lookup,Vs,Es) ->
     type_check(Ln,Lookup(I,Vs,Es),Type);
 expr(I={field,Ln,_OBJ,_ID},_Class,Type,Lookup,Vs,Es) ->
     type_check(Ln,Lookup(I,Vs,Es),Type);
-expr(I={timeout,_Ln,{identifier,_Ln,_ID}},_Class,_Type,Lookup,Vs,Es) ->
+expr(I={timeout,_Ln,{identifier,_Ln1,_ID}},_Class,_Type,Lookup,Vs,Es) ->
     Lookup(I,Vs,Es);
 expr({timeout,Ln,
       {field,_Ln,{identifier,_,OBJ},{identifier,_,ID}}},
@@ -791,11 +791,13 @@ is_integer_type(integer32) -> true;
 is_integer_type(integer) -> true;
 is_integer_type(_) -> false.
 
+-ifdef(not_used).
 is_signed_type(integer8) -> true;
 is_signed_type(integer16) -> true;
 is_signed_type(integer32) -> true;
 is_signed_type(integer) -> true;
 is_signed_type(_) -> false.
+-endif.
 
 get_number({decnum,_Ln,Ds}) -> list_to_integer(Ds,10);
 get_number({hexnum,_Ln,[$0,$x|Ds]}) -> list_to_integer(Ds,16);

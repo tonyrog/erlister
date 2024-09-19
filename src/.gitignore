@@ -1,2 +1,3 @@
 erlister_parser.erl
 erlister_scan.erl
+.*.d
